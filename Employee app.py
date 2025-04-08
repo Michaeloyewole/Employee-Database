@@ -1,3 +1,4 @@
+import os
 import streamlit as st  
 import pandas as pd  
 import matplotlib.pyplot as plt  
@@ -6,6 +7,93 @@ import uuid
 import io  
 import base64  
   
+# Define a directory for persistent CSV storage  
+DATA_DIR = 'data'  
+if not os.path.exists(DATA_DIR):  
+    os.makedirs(DATA_DIR)  
+  
+# Function to load employee data from CSV  
+def load_employees():  
+    employees_path = os.path.join(DATA_DIR, 'employees.csv')  
+    if os.path.exists(employees_path):  
+        return pd.read_csv(employees_path)  
+    else:  
+        # Create an empty DataFrame with proper columns  
+        return pd.DataFrame({  
+            'employee_id': [],  
+            'first_name': [],  
+            'last_name': [],  
+            'employee_number': [],  
+            'department': [],  
+            'job_title': [],  
+            'hire_date': [],  
+            'email': [],  
+            'phone': [],  
+            'address': [],  
+            'date_of_birth': [],  
+            'manager_id': [],  
+            'employment_status': []  
+        })  
+  
+# Function to save the employee DataFrame to CSV  
+def save_employees(df):  
+    employees_path = os.path.join(DATA_DIR, 'employees.csv')  
+    df.to_csv(employees_path, index=False)  
+    st.success("Data saved successfully!")  
+  
+# Load employees data into session state on startup  
+if 'employees' not in st.session_state:  
+    st.session_state.employees = load_employees()  
+  
+st.title("Employee Records Tool")  
+st.header("Add New Employee")  
+  
+# Create a form for entering a new employee  
+with st.form("employee_form", clear_on_submit=True):  
+    first_name = st.text_input("First Name")  
+    last_name = st.text_input("Last Name")  
+    employee_number = st.text_input("Employee Number")  
+    department = st.text_input("Department")  
+    job_title = st.text_input("Job Title")  
+    hire_date = st.date_input("Hire Date")  
+    email = st.text_input("Email")  
+    phone = st.text_input("Phone")  
+    address = st.text_area("Address")  
+    date_of_birth = st.date_input("Date of Birth")  
+    manager_id = st.text_input("Manager ID")  
+    employment_status = st.selectbox("Employment Status", ["Active", "Inactive"])  
+      
+    submitted = st.form_submit_button("Submit New Record")  
+    if submitted:  
+        new_employee = {  
+            'employee_id': str(uuid.uuid4()),  
+            'first_name': first_name,  
+            'last_name': last_name,  
+            'employee_number': employee_number,  
+            'department': department,  
+            'job_title': job_title,  
+            'hire_date': hire_date,  
+            'email': email,  
+            'phone': phone,  
+            'address': address,  
+            'date_of_birth': date_of_birth,  
+            'manager_id': manager_id,  
+            'employment_status': employment_status  
+        }  
+          
+        # Append new record to the session state DataFrame  
+        st.session_state.employees = pd.concat(  
+            [st.session_state.employees, pd.DataFrame([new_employee])],  
+            ignore_index=True  
+        )  
+        st.success("New employee record added!")  
+          
+# Provide a button to save all current data to CSV  
+if st.button("Save All Data"):  
+    save_employees(st.session_state.employees)  
+  
+st.header("Current Employee Records")  
+st.dataframe(st.session_state.employees)    
 # Set page configuration  
 st.set_page_config(  
     page_title="Employee Records Tool",  
