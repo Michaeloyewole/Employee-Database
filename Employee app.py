@@ -656,4 +656,4 @@ elif page == "Reports":
             # Equal aspect ratio ensures that pie is drawn as a circle  
             ax.axis('equal')  
               
-            st.pyplot(
+            st.pyplot()
