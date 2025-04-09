@@ -218,4 +218,4 @@ if module == "Employees":
                 else:  
                     new_emp = pd.DataFrame({  
                         "employee_id": [employee_id],  
-                        "first"
+                        "first"})
