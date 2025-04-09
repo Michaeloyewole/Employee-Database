@@ -174,4 +174,4 @@ if module == "Employees":
         manager_id = st.text_input("Manager ID (max 6 digits)", max_chars=6)  
         employment_status = st.selectbox("Employment Status", ["Active", "Inactive", "Terminated"])  
         submitted_emp = st.form_submit_button("Add Employee")  
-        if submitted
+      
