@@ -1,5 +1,6 @@
 import os  
 import io  
+import base64  
 import streamlit as st  
 import pandas as pd  
 import matplotlib.pyplot as plt  
@@ -10,7 +11,7 @@ from email.mime.multipart import MIMEMultipart
 import requests  
   
 # --------------------------------------------------  
-# 1. Page Config & Data Directory  
+# 1. Page Configuration & Data Directory  
 # --------------------------------------------------  
 st.set_page_config(  
     page_title="Employee Records Tool",  
@@ -39,7 +40,20 @@ def save_table(table_name, df):
     st.success(f"{table_name.capitalize()} data saved successfully!")  
   
 # --------------------------------------------------  
-# 3. Utilities for Employee Lookup  
+# 3. CSV Import/Export Utility Functions  
+# --------------------------------------------------  
+def get_csv_download_link(df, filename="data.csv"):  
+    csv = df.to_csv(index=False).encode('utf-8')  
+    b64 = base64.b64encode(csv).decode("utf-8")  
+    return f'<a href="data:file/csv;base64,{b64}" download="{filename}">Download CSV File</a>'  
+  
+def import_csv_to_table(df, table_name):  
+    # Save imported CSV to data directory  
+    save_table(table_name, df)  
+    st.success(f"Imported CSV to {table_name} table successfully!")  
+  
+# --------------------------------------------------  
+# 4. Utilities for Employee Lookup  
 # --------------------------------------------------  
 def get_employee_display_name(emp_id):  
     if not emp_id:  
@@ -60,107 +74,100 @@ def get_employee_email(emp_id):
     return None  
   
 # --------------------------------------------------  
-# 4. Email and Calendar Integration Functions  
+# 5. Email and Calendar Integration Functions  
 # --------------------------------------------------  
-def send_meeting_email(admin_email, admin_password, employee_id, meeting_date, meeting_time, agenda, action_items, next_meeting_date):  
-    receiver_email = get_employee_email(employee_id)  
-    if not receiver_email:  
-        st.warning("Employee email not found; email not sent.")  
-        return  
-    subject = "Your Upcoming Meeting Details"  
-    # Use triple quotes with proper formatting (avoid escaping backslashes unnecessarily)  
-    body = f"""Dear {get_employee_display_name(employee_id)},  
-  
-This is an automated message with your meeting details.  
-  
-Meeting Date: {meeting_date.strftime('%Y-%m-%d')}  
-Meeting Time: {meeting_time.strftime('%H:%M')}  
-Meeting Agenda:  
-{agenda}  
-  
-Action Items:  
-{action_items}  
-  
-Your next meeting is scheduled on: {next_meeting_date.strftime('%Y-%m-%d')}  
-  
-Regards,  
-Admin  
-"""  
+def send_meeting_email(employee_id, meeting_date, meeting_time, meeting_agenda, action_items, next_meeting_date):  
+    employee_email = get_employee_email(employee_id)  
+    if not employee_email:  
+        st.warning("Could not find employee email. Email notification not sent.")  
+        return False  
+      
+    # Retrieve admin credentials (set in sidebar)  
+    admin_email = st.session_state.get('admin_email', '')  
+    admin_password = st.session_state.get('admin_password', '')  
+      
+    if not admin_email or not admin_password:  
+        st.warning("Admin email credentials not set. Email notification not sent.")  
+        return False  
+      
+    subject = "One-on-One Meeting Summary"  
+      
+    # Build the email body without escape issues  
+    body = "Dear " + get_employee_display_name(employee_id) + ",\n\n"  
+    body += "This is a summary of your recent one-on-one meeting:\n\n"  
+    body += "Date: " + meeting_date + "\n"  
+    body += "Time: " + meeting_time + "\n\n"  
+    body += "Meeting Agenda:\n" + meeting_agenda + "\n\n"  
+    body += "Action Items:\n" + action_items + "\n\n"  
+    body += "Next Meeting Date: " + next_meeting_date + "\n\n"  
+    body += "Please let me know if you have any questions.\n\n"  
+    body += "Regards,\nYour Manager"  
+      
     try:  
         msg = MIMEMultipart()  
         msg['From'] = admin_email  
-        msg['To'] = receiver_email  
+        msg['To'] = employee_email  
         msg['Subject'] = subject  
         msg.attach(MIMEText(body, 'plain'))  
           
-        # Setup Outlook SMTP server, update as needed  
-        server = smtplib.SMTP('smtp.office365.com', 587)  
+        # Outlook SMTP settings (adjust as needed)  
+        server = smtplib.SMTP('smtp-mail.outlook.com', 587)  
         server.starttls()  
         server.login(admin_email, admin_password)  
-        text = msg.as_string()  
-        server.sendmail(admin_email, receiver_email, text)  
+        server.send_message(msg)  
         server.quit()  
-        st.success("Meeting email sent successfully!")  
+          
+        st.success("Meeting summary email sent to employee.")  
+        return True  
     except Exception as e:  
-        st.error("Error sending email: " + str(e))  
+        st.error("Failed to send email: " + str(e))  
+        return False  
   
 def update_ms_calendar(employee_id, meeting_date, meeting_time, next_meeting_date):  
-    # Placeholder function: Integrate with Microsoft Graph API here.  
-    # You must implement OAuth, get an access token, and then update the calendar.  
-    # This is a stub function.  
-    st.info("MS Calendar updated (placeholder).")  
-    return  
+    # Placeholder for Microsoft Graph API integration.  
+    # To fully implement, supply your credentials and complete the API call.  
+    st.info("MS Calendar update called for employee " + str(employee_id))  
+    # Example: requests.post('https://graph.microsoft.com/v1.0/me/events', json=event_data)  
+    return True  
   
 # --------------------------------------------------  
-# 5. Sidebar: CSV Import & Export and Admin Credentials  
+# 6. Sidebar: CSV Upload/Download & Admin Credentials  
 # --------------------------------------------------  
-st.sidebar.header("Data Management and Admin Settings")  
-  
-# CSV Import  
-import_option = st.sidebar.file_uploader("Import CSV (select file)", type=["csv"])  
-table_option = st.sidebar.selectbox("Select table to update", ("employees", "meetings", "disciplinary", "performance", "training"))  
-if import_option is not None:  
+st.sidebar.header("Data Management")  
+table_to_update = st.sidebar.selectbox("Select table to update", ["employees", "meetings", "disciplinary", "performance", "training"])  
+csv_file = st.sidebar.file_uploader("Upload CSV", type=["csv"])  
+if csv_file is not None:  
     try:  
-        df_import = pd.read_csv(import_option, dtype=str)  
-        if table_option == "employees":  
-            st.session_state.employees = df_import  
-        elif table_option == "meetings":  
-            st.session_state.meetings = df_import  
-        elif table_option == "disciplinary":  
-            st.session_state.disciplinary = df_import  
-        elif table_option == "performance":  
-            st.session_state.performance = df_import  
-        elif table_option == "training":  
-            st.session_state.training = df_import  
-        st.sidebar.success(f"Updated {table_option} table successfully!")  
+        df_csv = pd.read_csv(csv_file, dtype=str)  
+        import_csv_to_table(df_csv, table_to_update)  
+        if table_to_update == "employees":  
+            st.session_state.employees = df_csv  
+        elif table_to_update == "meetings":  
+            st.session_state.meetings = df_csv  
+        # Add similar handling for other tables if necessary.  
     except Exception as e:  
-        st.sidebar.error("Failed to load CSV: " + str(e))  
+        st.error("Error reading CSV: " + str(e))  
   
-# CSV Download links  
-def get_csv_download_link(df, table_name):  
-    csv = df.to_csv(index=False).encode('utf-8')  
-    b64 = base64.b64encode(csv).decode()  
-    href = f'<a href="data:file/csv;base64,{b64}" download="{table_name}.csv">Download {table_name} data as CSV</a>'  
-    return href  
+st.sidebar.header("Download Data")  
+if st.sidebar.button("Download Employees CSV"):  
+    if 'employees' in st.session_state and not st.session_state.employees.empty:  
+        tmp_download_link = get_csv_download_link(st.session_state.employees, "employees.csv")  
+        st.sidebar.markdown(tmp_download_link, unsafe_allow_html=True)  
+    else:  
+        st.sidebar.warning("Employees data is empty.")  
   
-st.sidebar.markdown(get_csv_download_link(load_table("employees", [  
-    'employee_id', 'first_name', 'last_name', 'employee_number',  
-    'department', 'job_title', 'hire_date', 'email', 'phone',  
-    'address', 'date_of_birth', 'manager_id', 'employment_status'  
-]), "employees"), unsafe_allow_html=True)  
-  
-# Admin Credentials for Email and Calendar  
-st.sidebar.header("Admin Settings")  
-admin_email = st.sidebar.text_input("Admin Email (for sending notifications)")  
-admin_password = st.sidebar.text_input("Admin Email Password", type="password")  
+# Admin email settings for automatic email notifications  
+st.sidebar.header("Admin Email Settings (Outlook)")  
+st.session_state.admin_email = st.sidebar.text_input("Admin Email")  
+st.session_state.admin_password = st.sidebar.text_input("Admin Password", type="password")  
   
 # --------------------------------------------------  
-# 6. Tabs for Different Modules  
+# 7. Main Navigation  
 # --------------------------------------------------  
-module = st.sidebar.selectbox("Select Module", ("Employees", "One-on-One Meetings", "Disciplinary Actions", "Performance Reviews", "Training Records"))  
+module = st.selectbox("Select Module", ["Employees", "One-on-One Meetings", "Disciplinary Actions", "Performance Reviews", "Training Records"])  
   
 # --------------------------------------------------  
-# 7. Module: Employees  
+# 8. Module: Employees  
 # --------------------------------------------------  
 if module == "Employees":  
     st.header("Employees")  
@@ -201,16 +208,22 @@ if module == "Employees":
                         "manager_id": [manager_id],  
                         "employment_status": [employment_status]  
                     })  
-                    st.session_state.employees = pd.concat([st.session_state.employees, new_emp], ignore_index=True)  
+                    if 'employees' in st.session_state and not st.session_state.employees.empty:  
+                        st.session_state.employees = pd.concat([st.session_state.employees, new_emp], ignore_index=True)  
+                    else:  
+                        st.session_state.employees = new_emp  
                     st.success("Employee added!")  
     with col2:  
         st.subheader("Employees Table")  
-        st.dataframe(st.session_state.employees)  
-        if st.button("Save Employees Data"):  
-            save_table("employees", st.session_state.employees)  
+        if 'employees' in st.session_state:  
+            st.dataframe(st.session_state.employees)  
+            if st.button("Save Employees Data"):  
+                save_table("employees", st.session_state.employees)  
+        else:  
+            st.info("No employee records to display.")  
   
 # --------------------------------------------------  
-# 8. Module: One-on-One Meetings  
+# 9. Module: One-on-One Meetings  
 # --------------------------------------------------  
 elif module == "One-on-One Meetings":  
     st.header("One-on-One Meetings")  
@@ -223,24 +236,3 @@ elif module == "One-on-One Meetings":
                 save_table("meetings", st.session_state.meetings)  
         else:  
             st.info("No meeting records found.")  
-    with tab2:  
-        st.subheader("Add New Meeting")  
-        with st.form("meeting_form"):  
-            meeting_id = st.text_input("Meeting ID (max 6 digits)", max_chars=6)  
-            employee_id = st.text_input("Employee ID (max 6 digits)", max_chars=6)  
-            manager_id = st.text_input("Manager ID (max 6 digits)", max_chars=6)  
-            meeting_date = st.date_input("Meeting Date", datetime.date.today())  
-            meeting_time = st.time_input("Meeting Time", datetime.time(9, 0))  
-            # Renamed field  
-            meeting_agenda = st.text_area("Meeting Agenda")  
-            action_items = st.text_area("Action Items")  
-            notes = st.text_area("Notes")  
-            next_meeting_date = st.date_input("Next Meeting Date", datetime.date.today() + datetime.timedelta(days=30))  
-            submitted_meeting = st.form_submit_button("Add Meeting")  
-            if submitted_meeting:  
-                if meeting_id == "" or not meeting_id.isdigit():  
-                    st.error("Invalid Meeting ID.")  
-                elif employee_id == "" or not employee_id.isdigit():  
-                    st.error("Invalid Employee ID.")  
-                elif manager_id == "" or not manager_id.isdigit():  
-                    st.error
