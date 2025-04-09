@@ -45,6 +45,14 @@ def get_employee_display_name(emp_id):
         return f"{employee['first_name'].values[0]} {employee['last_name'].values[0]}"  
     return "Unknown"  
   
+def get_employee_email(emp_id):  
+    if emp_id is None or pd.isna(emp_id):  
+        return None  
+    employee = st.session_state.employees[st.session_state.employees['employee_id'] == emp_id]  
+    if not employee.empty and 'email' in employee.columns:  
+        return employee['email'].values[0]  
+    return None  
+  
 # -------------------------------  
 # 3. Initialize Tables in Session State  
 # -------------------------------  
@@ -83,74 +91,75 @@ if 'training' not in st.session_state:
 # -------------------------------  
 st.sidebar.header("CSV Import/Export")  
   
-# CSV Import  
-upload_option = st.sidebar.selectbox("Select table to update via CSV upload",   
-                                     ["Employees", "One-on-One Meetings", "Disciplinary Actions", "Performance Reviews", "Training Records"])  
-uploaded_file = st.sidebar.file_uploader("Upload CSV for " + upload_option, type=["csv"])  
+# CSV Import functionality  
+upload_table = st.sidebar.selectbox("Select Table to Import CSV",   
+                                   ["Employees", "One-on-One Meetings", "Disciplinary Actions", "Performance Reviews", "Training Records"])  
+uploaded_file = st.sidebar.file_uploader("Upload CSV file", type=["csv"])  
 if uploaded_file is not None:  
     try:  
         df_uploaded = pd.read_csv(uploaded_file)  
-        if upload_option == "Employees":  
+        if upload_table == "Employees":  
             st.session_state.employees = df_uploaded  
-        elif upload_option == "One-on-One Meetings":  
+        elif upload_table == "One-on-One Meetings":  
             st.session_state.meetings = df_uploaded  
-        elif upload_option == "Disciplinary Actions":  
+        elif upload_table == "Disciplinary Actions":  
             st.session_state.disciplinary = df_uploaded  
-        elif upload_option == "Performance Reviews":  
+        elif upload_table == "Performance Reviews":  
             st.session_state.performance = df_uploaded  
-        elif upload_option == "Training Records":  
+        elif upload_table == "Training Records":  
             st.session_state.training = df_uploaded  
-        st.sidebar.success(upload_option + " data uploaded successfully!")  
+        st.sidebar.success(f"{upload_table} table updated successfully from CSV!")  
     except Exception as e:  
         st.sidebar.error("Error uploading CSV: " + str(e))  
   
-# CSV Download  
-st.sidebar.header("Download CSV Data")  
-def get_csv_download_link(df, table_name):  
-    csv = df.to_csv(index=False)  
-    b64 = base64.b64encode(csv.encode()).decode()   
-    href = f'<a href="data:file/csv;base64,{b64}" download="{table_name}.csv">Download {table_name.capitalize()} CSV File</a>'  
-    return href  
+# CSV Export functionality  
+export_table = st.sidebar.selectbox("Select Table to Export CSV",   
+                                   ["Employees", "One-on-One Meetings", "Disciplinary Actions", "Performance Reviews", "Training Records"])  
+if st.sidebar.button("Download CSV"):  
+    if export_table == "Employees":  
+        csv = st.session_state.employees.to_csv(index=False).encode('utf-8')  
+    elif export_table == "One-on-One Meetings":  
+        csv = st.session_state.meetings.to_csv(index=False).encode('utf-8')  
+    elif export_table == "Disciplinary Actions":  
+        csv = st.session_state.disciplinary.to_csv(index=False).encode('utf-8')  
+    elif export_table == "Performance Reviews":  
+        csv = st.session_state.performance.to_csv(index=False).encode('utf-8')  
+    elif export_table == "Training Records":  
+        csv = st.session_state.training.to_csv(index=False).encode('utf-8')  
+    b64 = base64.b64encode(csv).decode('utf-8')  
+    href = f'<a href="data:file/csv;base64,{b64}" download="{export_table}.csv">Download CSV File</a>'  
+    st.sidebar.markdown(href, unsafe_allow_html=True)  
   
-selected_download = st.sidebar.selectbox("Select table to download CSV",   
-                                           ["Employees", "One-on-One Meetings", "Disciplinary Actions", "Performance Reviews", "Training Records"])  
-if selected_download == "Employees":  
-    st.sidebar.markdown(get_csv_download_link(st.session_state.employees, "employees"), unsafe_allow_html=True)  
-elif selected_download == "One-on-One Meetings":  
-    st.sidebar.markdown(get_csv_download_link(st.session_state.meetings, "meetings"), unsafe_allow_html=True)  
-elif selected_download == "Disciplinary Actions":  
-    st.sidebar.markdown(get_csv_download_link(st.session_state.disciplinary, "disciplinary"), unsafe_allow_html=True)  
-elif selected_download == "Performance Reviews":  
-    st.sidebar.markdown(get_csv_download_link(st.session_state.performance, "performance"), unsafe_allow_html=True)  
-elif selected_download == "Training Records":  
-    st.sidebar.markdown(get_csv_download_link(st.session_state.training, "training"), unsafe_allow_html=True)  
-  
-# SMTP Settings for sending emails via Outlook  
+# SMTP Settings for Email Notifications  
 st.sidebar.header("SMTP Email Settings")  
-smtp_server = st.sidebar.text_input("SMTP Server (e.g., smtp.office365.com)", value="smtp.office365.com")  
+smtp_server = st.sidebar.text_input("SMTP Server", value="smtp.office365.com")  
 smtp_port = st.sidebar.number_input("SMTP Port", value=587, step=1)  
-smtp_user = st.sidebar.text_input("Admin Email", value="your_admin@yourdomain.com")  
-smtp_password = st.sidebar.text_input("SMTP Password", type="password")  
+smtp_user = st.sidebar.text_input("Admin Email", value="admin@example.com")  
+smtp_password = st.sidebar.text_input("Email Password", type="password")  
   
 # -------------------------------  
-# 5. Functions for Email and Calendar Integration  
+# 5. Email and Calendar Functions  
 # -------------------------------  
-def send_meeting_email(meeting_data, employee_email):  
+def send_meeting_email(meeting_data):  
     try:  
+        employee_email = get_employee_email(meeting_data.get('employee_id'))  
+        if not employee_email:  
+            st.warning("No email found for this employee. Email notification not sent.")  
+            return  
+              
         msg = MIMEMultipart()  
-        msg["From"] = smtp_user  
-        msg["To"] = employee_email  
-        msg["Subject"] = "One-on-One Meeting Details"  
+        msg['From'] = smtp_user  
+        msg['To'] = employee_email  
+        msg['Subject'] = "One-on-One Meeting Details"  
+          
         body = f"""  
 Dear {get_employee_display_name(meeting_data.get('employee_id'))},  
   
-Here are the details of your upcoming one-on-one meeting:  
+Here is a summary of your recent one-on-one meeting with your manager:  
   
 Meeting Agenda: {meeting_data.get('Meeting Agenda')}  
 Action Items: {meeting_data.get('action_items')}  
 Next Meeting Date: {meeting_data.get('next_meeting_date')}  
-  
-Please prepare accordingly.  
   
 Best regards,  
 Admin  
@@ -166,18 +175,17 @@ Admin
         st.error("Failed to send email: " + str(e))  
   
 def update_microsoft_calendar(meeting_data):  
-    # Placeholder: Integrate with Outlook/Exchange to update calendar.  
-    st.info("Microsoft Calendar updated for next meeting date: " + str(meeting_data.get('next_meeting_date')))  
+    # Placeholder for Microsoft calendar update functionality.  
+    # This function should integrate with Outlook COM or Exchange Web Services  
+    # to create/update a calendar event for the next meeting date.  
+    # For now, we simply simulate the behavior.  
+    st.info("Microsoft Calendar has been updated with the next meeting date (" + meeting_data.get('next_meeting_date') + ") (simulation).")  
   
 # -------------------------------  
-# 6. Main App Navigation (Module Selection)  
+# 6. Main App Navigation (Using a Selectbox for the Module)  
 # -------------------------------  
-module = st.selectbox("Select Module",   
-                      ["Employees", "One-on-One Meetings", "Disciplinary Actions", "Performance Reviews", "Training Records"])  
+module = st.selectbox("Select Module", ["Employees", "One-on-One Meetings", "Disciplinary Actions", "Performance Reviews", "Training Records"])  
   
-# -------------------------------  
-# Module: Employees  
-# -------------------------------  
 if module == "Employees":  
     st.header("Employee Management")  
     with st.form("employee_form"):  
@@ -221,9 +229,6 @@ if module == "Employees":
     if st.button("Save Employees Data"):  
         save_table("employees", st.session_state.employees)  
   
-# -------------------------------  
-# Module: One-on-One Meetings  
-# -------------------------------  
 elif module == "One-on-One Meetings":  
     st.header("One-on-One Meetings")  
     with st.form("meeting_form"):  
@@ -232,14 +237,145 @@ elif module == "One-on-One Meetings":
         manager_id = st.text_input("Manager ID (max 6 digits)", max_chars=6)  
         meeting_date = st.date_input("Meeting Date", datetime.date.today())  
         meeting_time = st.time_input("Meeting Time", datetime.datetime.now().time())  
-        meeting_agenda = st.text_area("Meeting Agenda")  
+        meeting_agenda = st.text_area("Meeting Agenda")  # Changed from "Topics Discussed" to "Meeting Agenda"  
         action_items = st.text_area("Action Items")  
         notes = st.text_area("Notes")  
-        next_meeting_date = st.date_input("Next Meeting Date", datetime.date.today())  
+        next_meeting_date = st.date_input("Next Meeting Date", datetime.date.today() + datetime.timedelta(days=30))  
         submitted_meeting = st.form_submit_button("Record Meeting")  
         if submitted_meeting:  
             if meeting_id == "" or not meeting_id.isdigit():  
                 st.error("Please enter a valid numeric Meeting ID (up to 6 digits).")  
             elif employee_id == "" or not employee_id.isdigit():  
                 st.error("Please enter a valid numeric Employee ID (up to 6 digits).")  
-            elif manager_id == "" or not manager
+            elif manager_id == "" or not manager_id.isdigit():  
+                st.error("Please enter a valid numeric Manager ID (up to 6 digits).")  
+            else:  
+                new_meeting = pd.DataFrame({  
+                    "meeting_id": [meeting_id],  
+                    "employee_id": [employee_id],  
+                    "manager_id": [manager_id],  
+                    "meeting_date": [meeting_date.strftime('%Y-%m-%d')],  
+                    "meeting_time": [meeting_time.strftime('%H:%M:%S')],  
+                    "Meeting Agenda": [meeting_agenda],  # Changed from "topics_discussed" to "Meeting Agenda"  
+                    "action_items": [action_items],  
+                    "notes": [notes],  
+                    "next_meeting_date": [next_meeting_date.strftime('%Y-%m-%d')]  
+                })  
+                st.session_state.meetings = pd.concat([st.session_state.meetings, new_meeting], ignore_index=True)  
+                st.success("Meeting recorded successfully!")  
+                  
+                # Send email notification  
+                meeting_data = {  
+                    "employee_id": employee_id,  
+                    "Meeting Agenda": meeting_agenda,  
+                    "action_items": action_items,  
+                    "next_meeting_date": next_meeting_date.strftime('%Y-%m-%d')  
+                }  
+                send_meeting_email(meeting_data)  
+                  
+                # Update Microsoft Calendar  
+                update_microsoft_calendar(meeting_data)  
+                  
+    st.subheader("One-on-One Meetings Table")  
+    st.dataframe(st.session_state.meetings)  
+    if st.button("Save Meetings Data"):  
+        save_table("meetings", st.session_state.meetings)  
+  
+elif module == "Disciplinary Actions":  
+    st.header("Disciplinary Actions")  
+    with st.form("disciplinary_form"):  
+        disciplinary_id = st.text_input("Disciplinary Action ID (max 6 digits)", max_chars=6)  
+        employee_id = st.text_input("Employee ID (max 6 digits)", max_chars=6)  
+        date = st.date_input("Date", datetime.date.today())  
+        action_type = st.selectbox("Type", ["Verbal Warning", "Written Warning", "Final Warning", "Suspension", "Termination"])  
+        reason = st.text_input("Reason")  
+        description = st.text_area("Description")  
+        documentation = st.text_area("Documentation")  
+        issued_by = st.text_input("Issued By (max 6 digits)", max_chars=6)  
+        submitted_disc = st.form_submit_button("Record Disciplinary Action")  
+        if submitted_disc:  
+            if disciplinary_id == "" or not disciplinary_id.isdigit():  
+                st.error("Please enter a valid numeric Disciplinary Action ID (up to 6 digits).")  
+            elif employee_id == "" or not employee_id.isdigit():  
+                st.error("Please enter a valid numeric Employee ID (up to 6 digits).")  
+            elif issued_by == "" or not issued_by.isdigit():  
+                st.error("Please enter a valid numeric Issued By ID (up to 6 digits).")  
+            else:  
+                new_disc = pd.DataFrame({  
+                    "disciplinary_id": [disciplinary_id],  
+                    "employee_id": [employee_id],  
+                    "date": [date.strftime('%Y-%m-%d')],  
+                    "type": [action_type],  
+                    "reason": [reason],  
+                    "description": [description],  
+                    "documentation": [documentation],  
+                    "issued_by": [issued_by]  
+                })  
+                st.session_state.disciplinary = pd.concat([st.session_state.disciplinary, new_disc], ignore_index=True)  
+                st.success("Disciplinary action recorded successfully!")  
+    st.subheader("Disciplinary Actions Table")  
+    st.dataframe(st.session_state.disciplinary)  
+    if st.button("Save Disciplinary Data"):  
+        save_table("disciplinary", st.session_state.disciplinary)  
+  
+elif module == "Performance Reviews":  
+    st.header("Performance Reviews")  
+    with st.form("performance_form"):  
+        review_id = st.text_input("Review ID (max 6 digits)", max_chars=6)  
+        employee_id = st.text_input("Employee ID (max 6 digits)", max_chars=6)  
+        review_date = st.date_input("Review Date", datetime.date.today())  
+        reviewer = st.text_input("Reviewer ID (max 6 digits)", max_chars=6)  
+        score = st.slider("Score", 1, 5, 3)  
+        comments = st.text_area("Comments")  
+        submitted_review = st.form_submit_button("Record Performance Review")  
+        if submitted_review:  
+            if review_id == "" or not review_id.isdigit():  
+                st.error("Please enter a valid numeric Review ID (up to 6 digits).")  
+            elif employee_id == "" or not employee_id.isdigit():  
+                st.error("Please enter a valid numeric Employee ID (up to 6 digits).")  
+            elif reviewer == "" or not reviewer.isdigit():  
+                st.error("Please enter a valid numeric Reviewer ID (up to 6 digits).")  
+            else:  
+                new_review = pd.DataFrame({  
+                    "review_id": [review_id],  
+                    "employee_id": [employee_id],  
+                    "review_date": [review_date.strftime('%Y-%m-%d')],  
+                    "reviewer": [reviewer],  
+                    "score": [score],  
+                    "comments": [comments]  
+                })  
+                st.session_state.performance = pd.concat([st.session_state.performance, new_review], ignore_index=True)  
+                st.success("Performance review recorded successfully!")  
+    st.subheader("Performance Reviews Table")  
+    st.dataframe(st.session_state.performance)  
+    if st.button("Save Performance Data"):  
+        save_table("performance", st.session_state.performance)  
+  
+elif module == "Training Records":  
+    st.header("Training Records")  
+    with st.form("training_form"):  
+        training_id = st.text_input("Training ID (max 6 digits)", max_chars=6)  
+        employee_id = st.text_input("Employee ID (max 6 digits)", max_chars=6)  
+        training_date = st.date_input("Training Date", datetime.date.today())  
+        course_name = st.text_input("Course Name")  
+        status = st.selectbox("Status", ["Completed", "In Progress", "Not Started", "Failed"])  
+        submitted_training = st.form_submit_button("Record Training")  
+        if submitted_training:  
+            if training_id == "" or not training_id.isdigit():  
+                st.error("Please enter a valid numeric Training ID (up to 6 digits).")  
+            elif employee_id == "" or not employee_id.isdigit():  
+                st.error("Please enter a valid numeric Employee ID (up to 6 digits).")  
+            else:  
+                new_training = pd.DataFrame({  
+                    "training_id": [training_id],  
+                    "employee_id": [employee_id],  
+                    "training_date": [training_date.strftime('%Y-%m-%d')],  
+                    "course_name": [course_name],  
+                    "status": [status]  
+                })  
+                st.session_state.training = pd.concat([st.session_state.training, new_training], ignore_index=True)  
+                st.success("Training record added successfully!")  
+    st.subheader("Training Records Table")  
+    st.dataframe(st.session_state.training)  
+    if st.button("Save Training Data"):  
+        save_table("training", st.session_state.training)  
