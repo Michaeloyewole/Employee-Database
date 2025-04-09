@@ -87,14 +87,25 @@ if 'training' not in st.session_state:
     ])  
   
 # -------------------------------  
-# 4. Sidebar: CSV Import/Export and SMTP Settings  
+# 4. Sidebar: Navigation, CSV Import/Export and SMTP Settings  
 # -------------------------------  
+st.sidebar.title("Navigation")  
+module = st.sidebar.radio("Select Module", [  
+    "Employee Management",   
+    "One-on-One Meetings",   
+    "Disciplinary Actions",   
+    "Performance Reviews",   
+    "Training Records",  
+    "Reports"  
+])  
+  
+# CSV Import/Export Section  
 st.sidebar.header("CSV Import/Export")  
   
-# CSV Import functionality  
-upload_table = st.sidebar.selectbox("Select Table to Import CSV",   
+# CSV Import  
+upload_table = st.sidebar.selectbox("Select table to update via CSV upload",   
                                    ["Employees", "One-on-One Meetings", "Disciplinary Actions", "Performance Reviews", "Training Records"])  
-uploaded_file = st.sidebar.file_uploader("Upload CSV file", type=["csv"])  
+uploaded_file = st.sidebar.file_uploader("Upload CSV for " + upload_table, type=["csv"])  
 if uploaded_file is not None:  
     try:  
         df_uploaded = pd.read_csv(uploaded_file)  
@@ -108,13 +119,12 @@ if uploaded_file is not None:
             st.session_state.performance = df_uploaded  
         elif upload_table == "Training Records":  
             st.session_state.training = df_uploaded  
-        st.sidebar.success(f"{upload_table} table updated successfully from CSV!")  
+        st.sidebar.success(f"{upload_table} data uploaded successfully!")  
     except Exception as e:  
         st.sidebar.error("Error uploading CSV: " + str(e))  
   
 # CSV Export functionality  
-export_table = st.sidebar.selectbox("Select Table to Export CSV",   
-                                   ["Employees", "One-on-One Meetings", "Disciplinary Actions", "Performance Reviews", "Training Records"])  
+export_table = st.sidebar.selectbox("Select Table to Export CSV", ["Employees", "One-on-One Meetings", "Disciplinary Actions", "Performance Reviews", "Training Records"])  
 if st.sidebar.button("Download CSV"):  
     if export_table == "Employees":  
         csv = st.session_state.employees.to_csv(index=False).encode('utf-8')  
@@ -140,26 +150,22 @@ smtp_password = st.sidebar.text_input("Email Password", type="password")
 # -------------------------------  
 # 5. Email and Calendar Functions  
 # -------------------------------  
-def send_meeting_email(meeting_data):  
+def send_meeting_email(meeting_data, employee_email):  
     try:  
-        employee_email = get_employee_email(meeting_data.get('employee_id'))  
-        if not employee_email:  
-            st.warning("No email found for this employee. Email notification not sent.")  
-            return  
-              
         msg = MIMEMultipart()  
-        msg['From'] = smtp_user  
-        msg['To'] = employee_email  
-        msg['Subject'] = "One-on-One Meeting Details"  
-          
+        msg["From"] = smtp_user  
+        msg["To"] = employee_email  
+        msg["Subject"] = "One-on-One Meeting Details"  
         body = f"""  
 Dear {get_employee_display_name(meeting_data.get('employee_id'))},  
   
-Here is a summary of your recent one-on-one meeting with your manager:  
+Here are the details of your upcoming one-on-one meeting:  
   
 Meeting Agenda: {meeting_data.get('Meeting Agenda')}  
 Action Items: {meeting_data.get('action_items')}  
 Next Meeting Date: {meeting_data.get('next_meeting_date')}  
+  
+Please prepare accordingly.  
   
 Best regards,  
 Admin  
@@ -175,18 +181,17 @@ Admin
         st.error("Failed to send email: " + str(e))  
   
 def update_microsoft_calendar(meeting_data):  
-    # Placeholder for Microsoft calendar update functionality.  
-    # This function should integrate with Outlook COM or Exchange Web Services  
-    # to create/update a calendar event for the next meeting date.  
-    # For now, we simply simulate the behavior.  
-    st.info("Microsoft Calendar has been updated with the next meeting date (" + meeting_data.get('next_meeting_date') + ") (simulation).")  
+    # Placeholder: Integrate with Outlook/Exchange to update calendar  
+    st.info(f"Microsoft Calendar updated for next meeting date: {meeting_data.get('next_meeting_date')}")  
   
 # -------------------------------  
-# 6. Main App Navigation (Using a Selectbox for the Module)  
+# 6. Main App Content Based on Selected Module  
 # -------------------------------  
-module = st.selectbox("Select Module", ["Employees", "One-on-One Meetings", "Disciplinary Actions", "Performance Reviews", "Training Records"])  
   
-if module == "Employees":  
+# -------------------------------  
+# Module: Employee Management  
+# -------------------------------  
+if module == "Employee Management":  
     st.header("Employee Management")  
     with st.form("employee_form"):  
         employee_id = st.text_input("Employee ID (max 6 digits)", max_chars=6)  
@@ -229,6 +234,9 @@ if module == "Employees":
     if st.button("Save Employees Data"):  
         save_table("employees", st.session_state.employees)  
   
+# -------------------------------  
+# Module: One-on-One Meetings  
+# -------------------------------  
 elif module == "One-on-One Meetings":  
     st.header("One-on-One Meetings")  
     with st.form("meeting_form"):  
@@ -237,10 +245,10 @@ elif module == "One-on-One Meetings":
         manager_id = st.text_input("Manager ID (max 6 digits)", max_chars=6)  
         meeting_date = st.date_input("Meeting Date", datetime.date.today())  
         meeting_time = st.time_input("Meeting Time", datetime.datetime.now().time())  
-        meeting_agenda = st.text_area("Meeting Agenda")  # Changed from "Topics Discussed" to "Meeting Agenda"  
+        meeting_agenda = st.text_area("Meeting Agenda")  
         action_items = st.text_area("Action Items")  
         notes = st.text_area("Notes")  
-        next_meeting_date = st.date_input("Next Meeting Date", datetime.date.today() + datetime.timedelta(days=30))  
+        next_meeting_date = st.date_input("Next Meeting Date", datetime.date.today())  
         submitted_meeting = st.form_submit_button("Record Meeting")  
         if submitted_meeting:  
             if meeting_id == "" or not meeting_id.isdigit():  
@@ -256,7 +264,7 @@ elif module == "One-on-One Meetings":
                     "manager_id": [manager_id],  
                     "meeting_date": [meeting_date.strftime('%Y-%m-%d')],  
                     "meeting_time": [meeting_time.strftime('%H:%M:%S')],  
-                    "Meeting Agenda": [meeting_agenda],  # Changed from "topics_discussed" to "Meeting Agenda"  
+                    "Meeting Agenda": [meeting_agenda],  
                     "action_items": [action_items],  
                     "notes": [notes],  
                     "next_meeting_date": [next_meeting_date.strftime('%Y-%m-%d')]  
@@ -264,42 +272,50 @@ elif module == "One-on-One Meetings":
                 st.session_state.meetings = pd.concat([st.session_state.meetings, new_meeting], ignore_index=True)  
                 st.success("Meeting recorded successfully!")  
                   
-                # Send email notification  
-                meeting_data = {  
-                    "employee_id": employee_id,  
-                    "Meeting Agenda": meeting_agenda,  
-                    "action_items": action_items,  
-                    "next_meeting_date": next_meeting_date.strftime('%Y-%m-%d')  
-                }  
-                send_meeting_email(meeting_data)  
+                # Send email notification if employee email exists  
+                employee_email = get_employee_email(employee_id)  
+                if employee_email:  
+                    if st.button("Send Email Notification"):  
+                        meeting_data = {  
+                            "employee_id": employee_id,  
+                            "Meeting Agenda": meeting_agenda,  
+                            "action_items": action_items,  
+                            "next_meeting_date": next_meeting_date.strftime('%Y-%m-%d')  
+                        }  
+                        send_meeting_email(meeting_data, employee_email)  
                   
                 # Update Microsoft Calendar  
-                update_microsoft_calendar(meeting_data)  
-                  
+                if st.button("Update Calendar"):  
+                    meeting_data = {  
+                        "next_meeting_date": next_meeting_date.strftime('%Y-%m-%d')  
+                    }  
+                    update_microsoft_calendar(meeting_data)  
+      
     st.subheader("One-on-One Meetings Table")  
     st.dataframe(st.session_state.meetings)  
     if st.button("Save Meetings Data"):  
         save_table("meetings", st.session_state.meetings)  
   
+# -------------------------------  
+# Module: Disciplinary Actions  
+# -------------------------------  
 elif module == "Disciplinary Actions":  
     st.header("Disciplinary Actions")  
     with st.form("disciplinary_form"):  
-        disciplinary_id = st.text_input("Disciplinary Action ID (max 6 digits)", max_chars=6)  
+        disciplinary_id = st.text_input("Disciplinary ID (max 6 digits)", max_chars=6)  
         employee_id = st.text_input("Employee ID (max 6 digits)", max_chars=6)  
         date = st.date_input("Date", datetime.date.today())  
         action_type = st.selectbox("Type", ["Verbal Warning", "Written Warning", "Final Warning", "Suspension", "Termination"])  
         reason = st.text_input("Reason")  
         description = st.text_area("Description")  
         documentation = st.text_area("Documentation")  
-        issued_by = st.text_input("Issued By (max 6 digits)", max_chars=6)  
+        issued_by = st.text_input("Issued By")  
         submitted_disc = st.form_submit_button("Record Disciplinary Action")  
         if submitted_disc:  
             if disciplinary_id == "" or not disciplinary_id.isdigit():  
-                st.error("Please enter a valid numeric Disciplinary Action ID (up to 6 digits).")  
+                st.error("Please enter a valid numeric Disciplinary ID (up to 6 digits).")  
             elif employee_id == "" or not employee_id.isdigit():  
                 st.error("Please enter a valid numeric Employee ID (up to 6 digits).")  
-            elif issued_by == "" or not issued_by.isdigit():  
-                st.error("Please enter a valid numeric Issued By ID (up to 6 digits).")  
             else:  
                 new_disc = pd.DataFrame({  
                     "disciplinary_id": [disciplinary_id],  
@@ -318,13 +334,16 @@ elif module == "Disciplinary Actions":
     if st.button("Save Disciplinary Data"):  
         save_table("disciplinary", st.session_state.disciplinary)  
   
+# -------------------------------  
+# Module: Performance Reviews  
+# -------------------------------  
 elif module == "Performance Reviews":  
     st.header("Performance Reviews")  
     with st.form("performance_form"):  
         review_id = st.text_input("Review ID (max 6 digits)", max_chars=6)  
         employee_id = st.text_input("Employee ID (max 6 digits)", max_chars=6)  
         review_date = st.date_input("Review Date", datetime.date.today())  
-        reviewer = st.text_input("Reviewer ID (max 6 digits)", max_chars=6)  
+        reviewer = st.text_input("Reviewer")  
         score = st.slider("Score", 1, 5, 3)  
         comments = st.text_area("Comments")  
         submitted_review = st.form_submit_button("Record Performance Review")  
@@ -333,8 +352,6 @@ elif module == "Performance Reviews":
                 st.error("Please enter a valid numeric Review ID (up to 6 digits).")  
             elif employee_id == "" or not employee_id.isdigit():  
                 st.error("Please enter a valid numeric Employee ID (up to 6 digits).")  
-            elif reviewer == "" or not reviewer.isdigit():  
-                st.error("Please enter a valid numeric Reviewer ID (up to 6 digits).")  
             else:  
                 new_review = pd.DataFrame({  
                     "review_id": [review_id],  
@@ -351,6 +368,9 @@ elif module == "Performance Reviews":
     if st.button("Save Performance Data"):  
         save_table("performance", st.session_state.performance)  
   
+# -------------------------------  
+# Module: Training Records  
+# -------------------------------  
 elif module == "Training Records":  
     st.header("Training Records")  
     with st.form("training_form"):  
@@ -379,3 +399,178 @@ elif module == "Training Records":
     st.dataframe(st.session_state.training)  
     if st.button("Save Training Data"):  
         save_table("training", st.session_state.training)  
+  
+# -------------------------------  
+# Module: Reports  
+# -------------------------------  
+elif module == "Reports":  
+    st.header("Reports")  
+    report_type = st.selectbox("Select Report Type", [  
+        "Performance Scores by Employee",   
+        "One-on-One Meeting Timeline",   
+        "Training Completion Status",   
+        "Disciplinary Actions by Type"  
+    ])  
+      
+    if report_type == "Performance Scores by Employee":  
+        if not st.session_state.performance.empty:  
+            st.subheader("Performance Scores by Employee")  
+              
+            # Group by employee and calculate average score  
+            employee_scores = st.session_state.performance.groupby('employee_id')['score'].mean().reset_index()  
+            employee_scores.columns = ['Employee ID', 'Average Score']  
+              
+            # Add employee names  
+            employee_scores['Employee Name'] = employee_scores['Employee ID'].apply(get_employee_display_name)  
+              
+            st.table(employee_scores)  
+              
+            # Create a bar chart of employee scores  
+            fig, ax = plt.subplots(figsize=(12, 8))  
+            plt.style.use('default')  
+              
+            colors = ['#2563EB'] * len(employee_scores)  
+            ax.bar(employee_scores['Employee Name'], employee_scores['Average Score'], color=colors)  
+              
+            ax.set_title("Average Performance Scores by Employee", fontsize=20, pad=15, color="#171717")  
+            ax.set_xlabel("Employee", fontsize=16, labelpad=10, color="#171717")  
+            ax.set_ylabel("Average Score", fontsize=16, labelpad=10, color="#171717")  
+              
+            ax.spines['top'].set_visible(False)  
+            ax.spines['right'].set_visible(False)  
+            ax.spines['left'].set_color('#E5E7EB')  
+            ax.spines['bottom'].set_color('#E5E7EB')  
+              
+            ax.tick_params(axis='x', labelsize=14, colors='#171717', rotation=45)  
+            ax.tick_params(axis='y', labelsize=14, colors='#171717')  
+              
+            ax.set_axisbelow(True)  
+            ax.yaxis.grid(True, color='#F3F4F6')  
+              
+            plt.tight_layout()  
+            st.pyplot(fig)  
+        else:  
+            st.info("No performance data available for reporting.")  
+      
+    elif report_type == "One-on-One Meeting Timeline":  
+        if not st.session_state.meetings.empty:  
+            st.subheader("One-on-One Meeting Timeline")  
+              
+            # Get unique employees  
+            employees = st.session_state.employees['employee_id'].unique()  
+            employee_options = {emp_id: get_employee_display_name(emp_id) for emp_id in employees}  
+              
+            selected_employee = st.selectbox("Select Employee", list(employee_options.keys()),   
+                                            format_func=lambda x: employee_options[x])  
+              
+            # Filter meetings for selected employee  
+            employee_meetings = st.session_state.meetings[st.session_state.meetings['employee_id'] == selected_employee]  
+              
+            if not employee_meetings.empty:  
+                # Convert meeting_date to datetime  
+                employee_meetings['meeting_date'] = pd.to_datetime(employee_meetings['meeting_date'])  
+                  
+                # Sort by meeting date  
+                employee_meetings = employee_meetings.sort_values('meeting_date')  
+                  
+                st.table(employee_meetings[['meeting_date', 'Meeting Agenda', 'action_items']])  
+                  
+                # Create a timeline of meetings  
+                fig, ax = plt.subplots(figsize=(12, 8))  
+                plt.style.use('default')  
+                  
+                ax.plot(employee_meetings['meeting_date'], [1] * len(employee_meetings), 'o', markersize=10, color='#2563EB')  
+                  
+                ax.set_title(f"One-on-One Meeting Timeline for {employee_options[selected_employee]}",   
+                            fontsize=20, pad=15, color="#171717")  
+                ax.set_xlabel("Date", fontsize=16, labelpad=10, color="#171717")  
+                  
+                ax.spines['top'].set_visible(False)  
+                ax.spines['right'].set_visible(False)  
+                ax.spines['left'].set_visible(False)  
+                ax.spines['bottom'].set_color('#E5E7EB')  
+                  
+                ax.tick_params(axis='x', labelsize=14, colors='#171717', rotation=45)  
+                ax.tick_params(axis='y', labelsize=0)  
+                  
+                plt.tight_layout()  
+                st.pyplot(fig)  
+            else:  
+                st.info(f"No meetings found for {employee_options[selected_employee]}.")  
+        else:  
+            st.info("No meeting data available for reporting.")  
+      
+    elif report_type == "Training Completion Status":  
+        if not st.session_state.training.empty:  
+            st.subheader("Training Completion Status")  
+              
+            # Count training records by status  
+            completion_counts = st.session_state.training['status'].value_counts().reset_index()  
+            completion_counts.columns = ['Status', 'Count']  
+              
+            st.table(completion_counts)  
+              
+            # Create a pie chart of training completion status  
+            fig, ax = plt.subplots(figsize=(12, 8))  
+            plt.style.use('default')  
+              
+            colors = ['#2563EB', '#24EB84', '#B2EB24', '#EB3424']  
+            wedges, texts, autotexts = ax.pie(  
+                completion_counts['Count'],  
+                labels=completion_counts['Status'],  
+                autopct='%1.1f%%',  
+                startangle=90,  
+                colors=colors[:len(completion_counts)]  
+            )  
+              
+            ax.set_title("Training Completion Status", fontsize=20, pad=15, color="#171717")  
+              
+            for text in texts:  
+                text.set_color('#171717')  
+                text.set_fontsize(14)  
+              
+            for autotext in autotexts:  
+                autotext.set_color('white')  
+                autotext.set_fontsize(14)  
+              
+            ax.axis('equal')  
+            st.pyplot(fig)  
+        else:  
+            st.info("No training data available for reporting.")  
+      
+    elif report_type == "Disciplinary Actions by Type":  
+        if not st.session_state.disciplinary.empty:  
+            st.subheader("Disciplinary Actions by Type")  
+              
+            # Count disciplinary actions by type  
+            type_counts = st.session_state.disciplinary['type'].value_counts().reset_index()  
+            type_counts.columns = ['Type', 'Count']  
+              
+            st.table(type_counts)  
+              
+            # Create a bar chart of disciplinary action types  
+            fig, ax = plt.subplots(figsize=(12, 8))  
+            plt.style.use('default')  
+              
+            colors = ['#2563EB', '#24EB84', '#B2EB24', '#EB3424']  
+            ax.bar(type_counts['Type'], type_counts['Count'], color=colors[:len(type_counts)])  
+              
+            ax.set_title("Disciplinary Actions by Type", fontsize=20, pad=15, color="#171717")  
+            ax.set_xlabel("Type", fontsize=16, labelpad=10, color="#171717")  
+            ax.set_ylabel("Count", fontsize=16, labelpad=10, color="#171717")  
+              
+            ax.spines['top'].set_visible(False)  
+            ax.spines['right'].set_visible(False)  
+            ax.spines['left'].set_color('#E5E7EB')  
+            ax.spines['bottom'].set_color('#E5E7EB')  
+              
+            ax.tick_params(axis='x', labelsize=14, colors='#171717')  
+            ax.tick_params(axis='y', labelsize=14, colors='#171717')  
+              
+            ax.set_axisbelow(True)  
+            ax.yaxis.grid(True, color='#F3F4F6')  
+              
+            plt.tight_layout()  
+            st.pyplot(fig)  
+        else:  
+            st.info("No disciplinary data available for reporting.")  
