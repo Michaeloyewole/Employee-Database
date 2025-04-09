@@ -6,7 +6,6 @@ import datetime
 import smtplib  
 from email.mime.text import MIMEText  
 from email.mime.multipart import MIMEMultipart  
-import requests  
 import io  
   
 # -------------------------------  
@@ -39,153 +38,159 @@ def save_table(table_name, df):
     st.success(table_name.capitalize() + " data saved successfully!")  
   
 # -------------------------------  
-# 3. Email & Calendar Functions  
+# 3. Helper Functions for Employees  
 # -------------------------------  
+def get_employee_display_name(emp_id):  
+    if emp_id is None or pd.isna(emp_id):  
+        return "N/A"  
+    employee = st.session_state.employees[st.session_state.employees['employee_id'] == emp_id]  
+    if not employee.empty:  
+        return f"{employee['first_name'].values[0]} {employee['last_name'].values[0]}"  
+    return "Unknown"  
+  
 def get_employee_email(emp_id):  
-    if emp_id is None or emp_id == "":  
+    if emp_id is None or pd.isna(emp_id):  
         return None  
-    df = st.session_state.employees  
-    employee = df[df['employee_id'] == emp_id]  
+    employee = st.session_state.employees[st.session_state.employees['employee_id'] == emp_id]  
     if not employee.empty:  
         return employee['email'].values[0]  
     return None  
   
-def send_meeting_email(employee_id, meeting_agenda, action_items, next_meeting_date):  
-    # Ensure Outlook credentials are in session_state  
-    if 'admin_email' not in st.session_state or 'smtp_password' not in st.session_state:  
-        st.warning("Admin email credentials not set. Email not sent.")  
-        return  
-    recipient = get_employee_email(employee_id)  
-    if recipient is None or recipient == "":  
-        st.warning("Employee email not found. Email not sent.")  
-        return  
+# -------------------------------  
+# 4. Email and Calendar Integration Functions  
+# -------------------------------  
+def send_meeting_email(employee_id, meeting_date, meeting_time, meeting_agenda, action_items, next_meeting_date):  
+    employee_email = get_employee_email(employee_id)  
+    if not employee_email:  
+        st.warning("Could not find employee email. Email notification not sent.")  
+        return False  
   
-    admin_email = st.session_state.admin_email  
-    smtp_password = st.session_state.smtp_password  
-    smtp_server = st.session_state.smtp_server if 'smtp_server' in st.session_state else "smtp.office365.com"  
-    smtp_port = st.session_state.smtp_port if 'smtp_port' in st.session_state else 587  
-  
-    subject = "One-on-One Meeting Details"  
-    body = f"""Dear Employee,  
-  
-Here are the details of your recent one-on-one meeting:  
-  
-Meeting Agenda: {meeting_agenda}  
-Action Items: {action_items}  
-Next Meeting Date: {next_meeting_date.strftime('%Y-%m-%d')}  
-  
-Best regards,  
-Admin  
-"""  
-    msg = MIMEMultipart()  
-    msg['From'] = admin_email  
-    msg['To'] = recipient  
-    msg['Subject'] = subject  
-    msg.attach(MIMEText(body, 'plain'))  
+    # Use admin email settings from session state  
+    admin_email = st.session_state.get("admin_email", None)  
+    smtp_server = st.session_state.get("smtp_server", None)  
+    smtp_port = st.session_state.get("smtp_port", None)  
+    smtp_password = st.session_state.get("smtp_password", None)  
       
+    if not all([admin_email, smtp_server, smtp_port, smtp_password]):  
+        st.warning("Admin email settings are incomplete. Email notification not sent.")  
+        return False  
+  
     try:  
-        server = smtplib.SMTP(smtp_server, smtp_port)  
+        msg = MIMEMultipart()  
+        msg['From'] = admin_email  
+        msg['To'] = employee_email  
+        msg['Subject'] = "One-on-One Meeting Details"  
+        body = (  
+            "Dear " + get_employee_display_name(employee_id) + ",\n\n" +  
+            "Your one-on-one meeting has been scheduled.\n\n" +  
+            "Meeting Date: " + meeting_date.strftime("%Y-%m-%d") + "\n" +  
+            "Meeting Time: " + meeting_time.strftime("%H:%M:%S") + "\n" +  
+            "Meeting Agenda: " + meeting_agenda + "\n" +  
+            "Action Items: " + action_items + "\n" +  
+            "Next Meeting Date: " + next_meeting_date.strftime("%Y-%m-%d") + "\n\n" +  
+            "Best regards,\n" +  
+            "Admin"  
+        )  
+        msg.attach(MIMEText(body, 'plain'))  
+      
+        server = smtplib.SMTP(smtp_server, int(smtp_port))  
         server.starttls()  
         server.login(admin_email, smtp_password)  
-        server.sendmail(admin_email, recipient, msg.as_string())  
+        server.send_message(msg)  
         server.quit()  
-        st.success("Email notification sent successfully!")  
+        st.success("Email sent to " + employee_email)  
+        return True  
     except Exception as e:  
-        st.error("Error sending email: " + str(e))  
+        st.error("Failed to send email: " + str(e))  
+        return False  
   
 def update_ms_calendar(employee_id, next_meeting_date):  
-    # Placeholder function for Microsoft Calendar update.  
-    # Here you would implement your Microsoft Graph API integration.  
-    # For example, you can construct an API call to update the event.  
-    # This is a dummy function:  
-    st.info("Calendar updated for employee " + employee_id + " with next meeting on " + next_meeting_date.strftime("%Y-%m-%d"))  
-    return  
+    # Placeholder function for Microsoft Calendar integration.  
+    # You should use Microsoft Graph API to update the calendar event.  
+    # This example simply prints a message.  
+    st.info("Microsoft Calendar update placeholder called for employee " + str(employee_id) +   
+            " with next meeting date " + next_meeting_date.strftime("%Y-%m-%d"))  
+    return True  
   
 # -------------------------------  
-# 4. Sidebar: CSV Import/Export & Admin Credentials  
+# 5. Sidebar: CSV Upload/Download and Admin Settings  
 # -------------------------------  
-st.sidebar.header("CSV Import/Export & Admin Email Settings")  
-# CSV Import  
-upload_option = st.sidebar.selectbox("Select Table to Update", ["Employees", "One-on-One Meetings", "Disciplinary Actions", "Performance Reviews", "Training Records"])  
-uploaded_file = st.sidebar.file_uploader("Upload CSV File", type=["csv"])  
-if uploaded_file is not None:  
+st.sidebar.header("CSV Import/Export & Admin Settings")  
+# CSV Import/Export  
+st.sidebar.subheader("CSV Import/Export")  
+table_choice = st.sidebar.selectbox("Select Table", ["Employees", "One-on-One Meetings", "Disciplinary Actions", "Performance Reviews", "Training Records"])  
+uploaded_csv = st.sidebar.file_uploader("Upload CSV for " + table_choice, type=["csv"])  
+if uploaded_csv is not None:  
     try:  
-        data = pd.read_csv(uploaded_file)  
-        if upload_option == "Employees":  
-            st.session_state.employees = data  
-        elif upload_option == "One-on-One Meetings":  
-            st.session_state.meetings = data  
-        elif upload_option == "Disciplinary Actions":  
-            st.session_state.disciplinary = data  
-        elif upload_option == "Performance Reviews":  
-            st.session_state.performance = data  
-        elif upload_option == "Training Records":  
-            st.session_state.training = data  
-        st.sidebar.success(f"{upload_option} table updated successfully from CSV.")  
+        df_uploaded = pd.read_csv(uploaded_csv)  
+        if table_choice.lower() in st.session_state:  
+            st.session_state[table_choice.lower()] = df_uploaded  
+        else:  
+            st.session_state[table_choice.lower()] = df_uploaded  
+        st.sidebar.success(table_choice + " data updated from CSV!")  
     except Exception as e:  
         st.sidebar.error("Error reading CSV: " + str(e))  
-  
-# CSV Download example (for Employees)  
-if st.sidebar.button("Download Employees CSV"):  
-    csv = st.session_state.employees.to_csv(index=False).encode('utf-8')  
-    st.sidebar.download_button(  
-        "Download Employees CSV",  
-        csv,  
-        "employees.csv",  
-        "text/csv",  
-        key='download-employees'  
-    )  
-  
-# Admin Email Settings  
-st.sidebar.header("Outlook SMTP Settings (Admin)")  
-admin_email = st.sidebar.text_input("Admin Email (From address)")  
-smtp_server = st.sidebar.text_input("SMTP Server", value="smtp.office365.com")  
-smtp_port = st.sidebar.text_input("SMTP Port", value="587")  
+# CSV Download  
+if st.sidebar.button("Download CSV for " + table_choice):  
+    if table_choice.lower() in st.session_state:  
+        csv = st.session_state[table_choice.lower()].to_csv(index=False).encode("utf-8")  
+        st.sidebar.download_button(  
+            label="Download " + table_choice + " CSV",  
+            data=csv,  
+            file_name=table_choice + ".csv",  
+            mime="text/csv"  
+        )  
+    else:  
+        st.sidebar.info("No data available for " + table_choice)  
+          
+# Admin Email & Outlook SMTP Settings  
+st.sidebar.subheader("Admin Email & SMTP Settings")  
+admin_email = st.sidebar.text_input("Admin Email (Outlook)")  
+smtp_server = st.sidebar.text_input("SMTP Server", "smtp.office365.com")  
+smtp_port = st.sidebar.text_input("SMTP Port", "587")  
 smtp_password = st.sidebar.text_input("SMTP Password", type="password")  
-if admin_email and smtp_password:  
+if st.sidebar.button("Save Admin Settings"):  
     st.session_state.admin_email = admin_email  
     st.session_state.smtp_server = smtp_server  
-    st.session_state.smtp_port = int(smtp_port)  
+    st.session_state.smtp_port = smtp_port  
     st.session_state.smtp_password = smtp_password  
+    st.sidebar.success("Admin settings saved.")  
   
 # -------------------------------  
-# 5. Initialize Tables in Session State  
+# 6. Initialize Tables in Session State  
 # -------------------------------  
-if 'employees' not in st.session_state:  
+if "employees" not in st.session_state:  
     st.session_state.employees = load_table("employees", [  
-        "employee_id", "first_name", "last_name", "employee_number",  
-        "department", "job_title", "hire_date", "email", "phone",  
-        "address", "date_of_birth", "manager_id", "employment_status"  
+        "employee_id", "first_name", "last_name", "employee_number", "department",  
+        "job_title", "hire_date", "email", "phone", "address", "date_of_birth", "manager_id", "employment_status"  
     ])  
-if 'meetings' not in st.session_state:  
+  
+if "meetings" not in st.session_state:  
     st.session_state.meetings = load_table("meetings", [  
-        "meeting_id", "employee_id", "manager_id", "meeting_date",  
-        "meeting_time", "meeting_agenda", "action_items", "notes",  
-        "next_meeting_date"  
+        "meeting_id", "employee_id", "manager_id", "meeting_date", "meeting_time",  
+        "meeting_agenda", "action_items", "notes", "next_meeting_date"  
     ])  
-if 'disciplinary' not in st.session_state:  
+# For brevity, initializing other tables similarly (disciplinary, performance, training)  
+if "disciplinary" not in st.session_state:  
     st.session_state.disciplinary = load_table("disciplinary", [  
-        "disciplinary_id", "employee_id", "date", "type", "reason",  
-        "description", "documentation", "issued_by"  
+        "disciplinary_id", "employee_id", "date", "type", "reason", "description", "documentation", "issued_by"  
     ])  
-if 'performance' not in st.session_state:  
+if "performance" not in st.session_state:  
     st.session_state.performance = load_table("performance", [  
         "review_id", "employee_id", "review_date", "reviewer_id", "score", "comments"  
     ])  
-if 'training' not in st.session_state:  
+if "training" not in st.session_state:  
     st.session_state.training = load_table("training", [  
-        "training_id", "employee_id", "training_name", "provider",  
-        "start_date", "end_date", "status", "certification",  
-        "expiration_date", "comments"  
+        "training_id", "employee_id", "training_name", "provider", "start_date", "end_date", "status", "certification", "expiration_date", "comments"  
     ])  
   
 # -------------------------------  
-# 6. Main Navigation  
+# 7. Main Navigation  
 # -------------------------------  
 module = st.selectbox("Select Module", ["Employees", "One-on-One Meetings", "Disciplinary Actions", "Performance Reviews", "Training Records"])  
   
 # -------------------------------  
-# 7. Module: Employees  
+# 8. Module: Employees  
 # -------------------------------  
 if module == "Employees":  
     st.header("Employees")  
@@ -213,26 +218,4 @@ if module == "Employees":
                 else:  
                     new_emp = pd.DataFrame({  
                         "employee_id": [employee_id],  
-                        "first_name": [first_name],  
-                        "last_name": [last_name],  
-                        "employee_number": [employee_number],  
-                        "department": [department],  
-                        "job_title": [job_title],  
-                        "hire_date": [hire_date.strftime("%Y-%m-%d")],  
-                        "email": [email],  
-                        "phone": [phone],  
-                        "address": [address],  
-                        "date_of_birth": [date_of_birth.strftime("%Y-%m-%d")],  
-                        "manager_id": [manager_id],  
-                        "employment_status": [employment_status]  
-                    })  
-                    st.session_state.employees = pd.concat([st.session_state.employees, new_emp], ignore_index=True)  
-                    st.success("Employee added!")  
-    with col2:  
-        st.subheader("Employees Table")  
-        st.dataframe(st.session_state.employees)  
-        if st.button("Save Employees Data"):  
-            save_table("employees", st.session_state.employees)  
-  
-# -------------------------------  
-# 8. Module: One-on
+                        "first
