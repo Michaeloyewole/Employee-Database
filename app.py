@@ -3,7 +3,60 @@ import streamlit as st
 import pandas as pd  
 import matplotlib.pyplot as plt  
 import datetime  
-import base64  
+import base64
+
+# -------------------------------
+# Table Editing Function
+# -------------------------------
+def edit_table(df, key_prefix):
+    # Create a container for the edit interface
+    edit_container = st.container()
+    
+    with edit_container:
+        if st.button("Edit Table", key=f"{key_prefix}_edit_button"):
+            st.session_state[f"{key_prefix}_edit_mode"] = True
+    
+    # Check if we're in edit mode for this table
+    if f"{key_prefix}_edit_mode" in st.session_state and st.session_state[f"{key_prefix}_edit_mode"]:
+        with edit_container:
+            st.write("Select rows to delete:")
+            
+            # Display the dataframe with row selection
+            if not df.empty:
+                # Create a column for selection checkboxes
+                selection_col = []
+                for i in range(len(df)):
+                    key = f"{key_prefix}_select_{i}"
+                    selection_col.append(st.checkbox("", key=key))
+                
+                # Display the dataframe with selection column
+                selection_df = pd.DataFrame({"Select": selection_col})
+                display_df = pd.concat([selection_df, df.reset_index(drop=True)], axis=1)
+                st.dataframe(display_df)
+                
+                # Add delete button
+                if st.button("Delete Selected Rows", key=f"{key_prefix}_delete_button"):
+                    # Get indices of selected rows
+                    selected_indices = [i for i, selected in enumerate(selection_col) if selected]
+                    
+                    if selected_indices:
+                        # Drop selected rows
+                        df = df.drop(df.index[selected_indices]).reset_index(drop=True)
+                        st.success(f"Deleted {len(selected_indices)} row(s)")
+                        
+                        # Update the session state
+                        return df
+                    else:
+                        st.warning("No rows selected for deletion")
+            else:
+                st.info("No data to edit")
+            
+            # Add button to exit edit mode
+            if st.button("Exit Edit Mode", key=f"{key_prefix}_exit_button"):
+                st.session_state[f"{key_prefix}_edit_mode"] = False
+    
+    return df
+  
   
 # -------------------------------  
 # 1. Page Config & Data Directory  
@@ -57,279 +110,349 @@ def load_from_uploaded_file(uploaded_file, columns):
         for col in columns:  
             if col not in df.columns:  
                 df[col] = ""  
-        return df[columns]  
+        return df  
     except Exception as e:  
         st.error(f"Error loading file: {e}")  
-        return pd.DataFrame({col: [] for col in columns})
-
-# New function to auto-populate employee details
-def auto_populate_employee_details(employee_id):
-    """Auto-populate employee details when an existing ID is entered"""
-    if employee_id and not pd.isna(employee_id):
-        employee = st.session_state.employees[st.session_state.employees['employee_id'] == employee_id]
-        if not employee.empty:
-            return {
-                'first_name': employee['first_name'].values[0],
-                'last_name': employee['last_name'].values[0],
-                'department': employee['department'].values[0],
-                'position': employee['position'].values[0],
-                'hire_date': employee['hire_date'].values[0]
-            }
-    return None
-
+        return pd.DataFrame({col: [] for col in columns})  
+  
 # -------------------------------  
 # 4. Initialize Session State  
 # -------------------------------  
+employee_columns = ["employee_id", "first_name", "last_name", "department", "job_title", "email", "phone", "employment_status"]  
+meeting_columns = ["meeting_id", "employee_id", "meeting_date", "meeting_time", "Meeting Agenda", "action_items", "notes", "next_meeting_date"]  
+disciplinary_columns = ["disciplinary_id", "employee_id", "type", "date", "description"]  
+performance_columns = ["review_id", "employee_id", "review_date", "reviewer", "score", "comments"]  
+training_columns = ["training_id", "employee_id", "course_name", "start_date", "end_date", "status", "certification"]  
+  
 if 'employees' not in st.session_state:  
-    employee_columns = ['employee_id', 'first_name', 'last_name', 'department', 'position', 'hire_date']  
-    st.session_state.employees = load_table('employees', employee_columns)  
-  
+    st.session_state.employees = load_table("employees", employee_columns)  
 if 'meetings' not in st.session_state:  
-    meeting_columns = ['meeting_id', 'employee_id', 'meeting_date', 'meeting_type', 'notes']  
-    st.session_state.meetings = load_table('meetings', meeting_columns)  
-  
+    st.session_state.meetings = load_table("meetings", meeting_columns)  
+if 'disciplinary' not in st.session_state:  
+    st.session_state.disciplinary = load_table("disciplinary", disciplinary_columns)  
+if 'performance' not in st.session_state:  
+    st.session_state.performance = load_table("performance", performance_columns)  
 if 'training' not in st.session_state:  
-    training_columns = ['training_id', 'employee_id', 'course_name', 'completion_date', 'status']  
-    st.session_state.training = load_table('training', training_columns)  
+    st.session_state.training = load_table("training", training_columns)  
   
 # -------------------------------  
-# 5. Sidebar Navigation - CHANGED TO LIST MODULES INSTEAD OF DROPDOWN
+# 5. Sidebar Navigation  
 # -------------------------------  
-st.sidebar.title("Employee Records Tool")
-
-# Modules listed directly in sidebar instead of dropdown
-st.sidebar.header("Modules")
-
-# Employee Management Module
-if st.sidebar.button("Employee Management", use_container_width=True):
-    st.session_state.current_module = "Employee Management"
-
-# Meeting Records Module
-if st.sidebar.button("Meeting Records", use_container_width=True):
-    st.session_state.current_module = "Meeting Records"
-
-# Training Completion Module
-if st.sidebar.button("Training Completion", use_container_width=True):
-    st.session_state.current_module = "Training Completion"
-
-# Reports Module
-if st.sidebar.button("Reports", use_container_width=True):
-    st.session_state.current_module = "Reports"
-
-# Initialize current module if not set
-if 'current_module' not in st.session_state:
-    st.session_state.current_module = "Employee Management"
-
-# Display current module
-st.sidebar.markdown(f"**Current Module:** {st.session_state.current_module}")
-
-# Data Import/Export Section
-st.sidebar.header("Data Import/Export")
-
-# File uploader for each table
-table_to_import = st.sidebar.selectbox("Select table to import", ["employees", "meetings", "training"])
-uploaded_file = st.sidebar.file_uploader(f"Upload {table_to_import} CSV", type=['csv'])
-
-if uploaded_file is not None:
-    if table_to_import == "employees":
-        st.session_state.employees = load_from_uploaded_file(uploaded_file, st.session_state.employees.columns)
-        save_table("employees", st.session_state.employees)
-    elif table_to_import == "meetings":
-        st.session_state.meetings = load_from_uploaded_file(uploaded_file, st.session_state.meetings.columns)
-        save_table("meetings", st.session_state.meetings)
-    elif table_to_import == "training":
-        st.session_state.training = load_from_uploaded_file(uploaded_file, st.session_state.training.columns)
-        save_table("training", st.session_state.training)
-
-# Export data links
-st.sidebar.markdown("### Export Data")
-st.sidebar.markdown(get_csv_download_link(st.session_state.employees, "employees.csv", "Download Employees"), unsafe_allow_html=True)
-st.sidebar.markdown(get_csv_download_link(st.session_state.meetings, "meetings.csv", "Download Meetings"), unsafe_allow_html=True)
-st.sidebar.markdown(get_csv_download_link(st.session_state.training, "training.csv", "Download Training"), unsafe_allow_html=True)
-
+st.sidebar.title("Employee Records Tool")  
+module = st.sidebar.selectbox(  
+    "Select Module",  
+    ["Employee Management", "One-on-One Meetings", "Disciplinary Actions", "Performance Reviews", "Training Records", "Reports"]  
+)  
+  
 # -------------------------------  
-# 6. Main Content Area  
+# 6. Module: Employee Management  
 # -------------------------------  
-if st.session_state.current_module == "Employee Management":
-    st.title("Employee Management")
-    
-    # Display employee table
-    st.subheader("Employee Records")
-    st.dataframe(st.session_state.employees)
-    
-    # Form for adding/editing employees
-    st.subheader("Add/Edit Employee")
-    with st.form(key="employee_form"):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            employee_id = st.text_input("Employee ID")
-            
-            # Auto-populate fields if employee ID exists - NEW FEATURE
-            existing_details = auto_populate_employee_details(employee_id)
-            
-            if existing_details:
-                st.info(f"Existing employee found: {get_employee_display_name(employee_id)}")
-                first_name = st.text_input("First Name", value=existing_details['first_name'])
-                last_name = st.text_input("Last Name", value=existing_details['last_name'])
-            else:
-                first_name = st.text_input("First Name")
-                last_name = st.text_input("Last Name")
-        
-        with col2:
-            if existing_details:
-                department = st.text_input("Department", value=existing_details['department'])
-                position = st.text_input("Position", value=existing_details['position'])
-                hire_date = st.text_input("Hire Date", value=existing_details['hire_date'])
-            else:
-                department = st.text_input("Department")
-                position = st.text_input("Position")
-                hire_date = st.text_input("Hire Date", placeholder="YYYY-MM-DD")
-        
-        submit_button = st.form_submit_button("Save Employee")
-    
-    if submit_button:
-        # Check if we're updating an existing employee
-        if employee_id in st.session_state.employees['employee_id'].values:
-            # Update existing employee
-            idx = st.session_state.employees.index[st.session_state.employees['employee_id'] == employee_id].tolist()[0]
-            st.session_state.employees.at[idx, 'first_name'] = first_name
-            st.session_state.employees.at[idx, 'last_name'] = last_name
-            st.session_state.employees.at[idx, 'department'] = department
-            st.session_state.employees.at[idx, 'position'] = position
-            st.session_state.employees.at[idx, 'hire_date'] = hire_date
-            st.success(f"Updated employee: {first_name} {last_name}")
-        else:
-            # Add new employee
-            new_employee = pd.DataFrame({
-                'employee_id': [employee_id],
-                'first_name': [first_name],
-                'last_name': [last_name],
-                'department': [department],
-                'position': [position],
-                'hire_date': [hire_date]
-            })
-            st.session_state.employees = pd.concat([st.session_state.employees, new_employee], ignore_index=True)
-            st.success(f"Added new employee: {first_name} {last_name}")
-        
-        save_table("employees", st.session_state.employees)
-
-elif st.session_state.current_module == "Meeting Records":
-    st.title("Meeting Records")
-    
-    # Display meeting records
-    st.subheader("Meeting Records")
-    
-    # Add employee names to meetings for display
-    if not st.session_state.meetings.empty:
-        meetings_display = st.session_state.meetings.copy()
-        meetings_display['employee_name'] = meetings_display['employee_id'].apply(get_employee_display_name)
-        st.dataframe(meetings_display)
-    else:
-        st.dataframe(st.session_state.meetings)
-    
-    # Form for adding meeting records
-    st.subheader("Add Meeting Record")
-    with st.form(key="meeting_form"):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            meeting_id = st.text_input("Meeting ID")
-            employee_options = [""] + st.session_state.employees['employee_id'].tolist()
-            employee_id = st.selectbox("Employee", employee_options)
-            meeting_date = st.date_input("Meeting Date")
-        
-        with col2:
-            meeting_type = st.selectbox("Meeting Type", ["", "One-on-One", "Performance Review", "Project Discussion", "Other"])
-            notes = st.text_area("Notes")
-        
-        submit_button = st.form_submit_button("Save Meeting")
-    
-    if submit_button:
-        new_meeting = pd.DataFrame({
-            'meeting_id': [meeting_id],
-            'employee_id': [employee_id],
-            'meeting_date': [meeting_date.strftime("%Y-%m-%d")],
-            'meeting_type': [meeting_type],
-            'notes': [notes]
-        })
-        st.session_state.meetings = pd.concat([st.session_state.meetings, new_meeting], ignore_index=True)
-        save_table("meetings", st.session_state.meetings)
-        st.success("Meeting record added successfully!")
-
-elif st.session_state.current_module == "Training Completion":
-    st.title("Training Completion")
-    
-    # Display training records
-    st.subheader("Training Records")
-    
-    # Add employee names to training for display
-    if not st.session_state.training.empty:
-        training_display = st.session_state.training.copy()
-        training_display['employee_name'] = training_display['employee_id'].apply(get_employee_display_name)
-        st.dataframe(training_display)
-    else:
-        st.dataframe(st.session_state.training)
-    
-    # Form for adding training records
-    st.subheader("Add Training Record")
-    with st.form(key="training_form"):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            training_id = st.text_input("Training ID")
-            employee_options = [""] + st.session_state.employees['employee_id'].tolist()
-            employee_id = st.selectbox("Employee", employee_options)
-            course_name = st.text_input("Course Name")
-        
-        with col2:
-            completion_date = st.date_input("Completion Date")
-            status = st.selectbox("Status", ["", "Completed", "In Progress", "Not Started"])
-        
-        submit_button = st.form_submit_button("Save Training")
-    
-    if submit_button:
-        new_training = pd.DataFrame({
-            'training_id': [training_id],
-            'employee_id': [employee_id],
-            'course_name': [course_name],
-            'completion_date': [completion_date.strftime("%Y-%m-%d")],
-            'status': [status]
-        })
-        st.session_state.training = pd.concat([st.session_state.training, new_training], ignore_index=True)
-        save_table("training", st.session_state.training)
-        st.success("Training record added successfully!")
-
-elif st.session_state.current_module == "Reports":
-    st.title("Reports")
-    
-    report_type = st.selectbox("Select Report Type", ["", "Department Distribution", "Training Completion", "Meeting Frequency"])
-    
-    if report_type == "Department Distribution" and not st.session_state.employees.empty:
-        st.subheader("Department Distribution")
-        
-        dept_counts = st.session_state.employees['department'].value_counts().reset_index()
-        dept_counts.columns = ['Department', 'Count']
-        
-        st.dataframe(dept_counts)
-        
-        # Plot
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.bar(dept_counts['Department'], dept_counts['Count'], color='skyblue')
-        ax.set_xlabel('Department')
-        ax.set_ylabel('Number of Employees')
-        ax.set_title('Employee Distribution by Department')
-        plt.xticks(rotation=45, ha='right')
-        st.pyplot(fig)
-        
-        # Export option
-        st.markdown(get_csv_download_link(dept_counts, "department_distribution.csv", "Download Department Distribution"), unsafe_allow_html=True)
-        
-    elif report_type == "Training Completion" and not st.session_state.training.empty:
-        st.subheader("Training Completion")
-        training_status = pd.crosstab(st.session_state.training['course_name'], st.session_state.training['status'])
+if module == "Employee Management":  
+    st.header("Employee Management")  
+      
+    # CSV Upload option  
+    uploaded_employees = st.file_uploader("Upload Employees CSV", type="csv", key="employee_upload")  
+    if uploaded_employees is not None:  
+        st.session_state.employees = load_from_uploaded_file(uploaded_employees, employee_columns)  
+        st.success("Employee data uploaded successfully!")  
+      
+    with st.form("employee_form"):  
+        col1, col2 = st.columns(2)  
+        with col1:  
+            employee_id = st.text_input("Employee ID (max 6 digits)", max_chars=6)  
+            first_name = st.text_input("First Name")  
+            last_name = st.text_input("Last Name")  
+            department = st.text_input("Department")  
+        with col2:  
+            job_title = st.text_input("Job Title")  
+            email = st.text_input("Email")  
+            phone = st.text_input("Phone")  
+            employment_status = st.selectbox("Employment Status", ["Active", "Inactive", "On Leave", "Terminated"])  
           
-        st.dataframe(training_status)
+        submitted_employee = st.form_submit_button("Add/Update Employee")  
+        if submitted_employee:  
+            if employee_id == "" or not employee_id.isdigit():  
+                st.error("Please enter a valid numeric Employee ID (up to 6 digits).")  
+            else:  
+                new_employee = pd.DataFrame({  
+                    "employee_id": [employee_id],  
+                    "first_name": [first_name],  
+                    "last_name": [last_name],  
+                    "department": [department],  
+                    "job_title": [job_title],  
+                    "email": [email],  
+                    "phone": [phone],  
+                    "employment_status": [employment_status],  
+                })  
+                  
+                # Check if employee already exists  
+                if int(employee_id) in st.session_state.employees['employee_id'].values:  
+                    st.session_state.employees = st.session_state.employees[st.session_state.employees['employee_id'] != int(employee_id)]  
+                  
+                st.session_state.employees = pd.concat([st.session_state.employees, new_employee], ignore_index=True)  
+                st.success("Employee added/updated successfully!")  
+      
+    st.subheader("Employees Table")  
+    
+    # Add table editing functionality
+    st.session_state.employees = edit_table(st.session_state.employees, "employees")
+    st.dataframe(st.session_state.employees)  
+    st.markdown(get_csv_download_link(st.session_state.employees, "employees.csv", "Download Employees CSV"), unsafe_allow_html=True)  
+    if st.button("Save Employee Data"):  
+        save_table("employees", st.session_state.employees)  
+  
+# -------------------------------  
+# 7. Module: One-on-One Meetings  
+# -------------------------------  
+elif module == "One-on-One Meetings":  
+    st.header("One-on-One Meetings")  
+      
+    # CSV Upload option  
+    uploaded_meetings = st.file_uploader("Upload Meetings CSV", type="csv", key="meetings_upload")  
+    if uploaded_meetings is not None:  
+        st.session_state.meetings = load_from_uploaded_file(uploaded_meetings, meeting_columns)  
+        st.success("Meetings data uploaded successfully!")  
+      
+    with st.form("meeting_form"):  
+        col1, col2 = st.columns(2)  
+        with col1:  
+            meeting_id = st.text_input("Meeting ID (max 6 digits)", max_chars=6)  
+            employee_id = st.text_input("Employee ID (max 6 digits)", max_chars=6)  
+            meeting_date = st.date_input("Meeting Date", datetime.date.today())  
+            meeting_time = st.time_input("Meeting Time", datetime.time(9, 0))  
+        with col2:  
+            meeting_agenda = st.text_area("Meeting Agenda")  
+            action_items = st.text_area("Action Items")  
+            notes = st.text_area("Notes")  
+            next_meeting_date = st.date_input("Next Meeting Date", datetime.date.today())  
+        submitted_meeting = st.form_submit_button("Record Meeting")  
+        if submitted_meeting:  
+            if meeting_id == "" or not meeting_id.isdigit():  
+                st.error("Please enter a valid numeric Meeting ID (up to 6 digits).")  
+            elif employee_id == "" or not employee_id.isdigit():  
+                st.error("Please enter a valid numeric Employee ID (up to 6 digits).")  
+            else:  
+                new_meeting = pd.DataFrame({  
+                    "meeting_id": [meeting_id],  
+                    "employee_id": [employee_id],  
+                    "meeting_date": [meeting_date.strftime('%Y-%m-%d')],  
+                    "meeting_time": [meeting_time.strftime('%H:%M:%S')],  
+                    "Meeting Agenda": [meeting_agenda],  
+                    "action_items": [action_items],  
+                    "notes": [notes],  
+                    "next_meeting_date": [next_meeting_date.strftime('%Y-%m-%d')]  
+                })  
+                st.session_state.meetings = pd.concat([st.session_state.meetings, new_meeting], ignore_index=True)  
+                st.success("Meeting recorded successfully!")  
+      
+    st.subheader("Meetings Table")  
+    
+    # Add table editing functionality
+    st.session_state.meetings = edit_table(st.session_state.meetings, "meetings")
+    st.dataframe(st.session_state.meetings)  
+    st.markdown(get_csv_download_link(st.session_state.meetings, "meetings.csv", "Download Meetings CSV"), unsafe_allow_html=True)  
+    if st.button("Save Meetings Data"):  
+        save_table("meetings", st.session_state.meetings)  
+  
+# -------------------------------  
+# 8. Module: Disciplinary Actions  
+# -------------------------------  
+elif module == "Disciplinary Actions":  
+    st.header("Disciplinary Actions")  
+      
+    # CSV Upload option  
+    uploaded_disciplinary = st.file_uploader("Upload Disciplinary CSV", type="csv", key="disciplinary_upload")  
+    if uploaded_disciplinary is not None:  
+        st.session_state.disciplinary = load_from_uploaded_file(uploaded_disciplinary, disciplinary_columns)  
+        st.success("Disciplinary data uploaded successfully!")  
+      
+    with st.form("disciplinary_form"):  
+        col1, col2 = st.columns(2)  
+        with col1:  
+            disciplinary_id = st.text_input("Disciplinary ID (max 6 digits)", max_chars=6)  
+            employee_id = st.text_input("Employee ID (max 6 digits)", max_chars=6)  
+            d_type = st.text_input("Type")  
+        with col2:  
+            d_date = st.date_input("Date", datetime.date.today())  
+            description = st.text_area("Description")  
+        submitted_disc = st.form_submit_button("Record Disciplinary Action")  
+        if submitted_disc:  
+            if disciplinary_id == "" or not disciplinary_id.isdigit():  
+                st.error("Please enter a valid numeric Disciplinary ID (up to 6 digits).")  
+            elif employee_id == "" or not employee_id.isdigit():  
+                st.error("Please enter a valid numeric Employee ID (up to 6 digits).")  
+            else:  
+                new_disc = pd.DataFrame({  
+                    "disciplinary_id": [disciplinary_id],  
+                    "employee_id": [employee_id],  
+                    "type": [d_type],  
+                    "date": [d_date.strftime('%Y-%m-%d')],  
+                    "description": [description]  
+                })  
+                st.session_state.disciplinary = pd.concat([st.session_state.disciplinary, new_disc], ignore_index=True)  
+                st.success("Disciplinary action recorded successfully!")  
+      
+    st.subheader("Disciplinary Actions Table")  
+    
+    # Add table editing functionality
+    st.session_state.disciplinary = edit_table(st.session_state.disciplinary, "disciplinary")
+    st.dataframe(st.session_state.disciplinary)  
+    st.markdown(get_csv_download_link(st.session_state.disciplinary, "disciplinary.csv", "Download Disciplinary CSV"), unsafe_allow_html=True)  
+    if st.button("Save Disciplinary Data"):  
+        save_table("disciplinary", st.session_state.disciplinary)  
+  
+# -------------------------------  
+# 9. Module: Performance Reviews  
+# -------------------------------  
+elif module == "Performance Reviews":  
+    st.header("Performance Reviews")  
+      
+    # CSV Upload option  
+    uploaded_performance = st.file_uploader("Upload Performance CSV", type="csv", key="performance_upload")  
+    if uploaded_performance is not None:  
+        st.session_state.performance = load_from_uploaded_file(uploaded_performance, performance_columns)  
+        st.success("Performance data uploaded successfully!")  
+      
+    with st.form("performance_form"):  
+        col1, col2 = st.columns(2)  
+        with col1:  
+            review_id = st.text_input("Review ID (max 6 digits)", max_chars=6)  
+            employee_id = st.text_input("Employee ID (max 6 digits)", max_chars=6)  
+            review_date = st.date_input("Review Date", datetime.date.today())  
+        with col2:  
+            reviewer = st.text_input("Reviewer")  
+            score = st.slider("Score", 1, 5, 3)  
+            comments = st.text_area("Comments")  
+        submitted_review = st.form_submit_button("Record Performance Review")  
+        if submitted_review:  
+            if review_id == "" or not review_id.isdigit():  
+                st.error("Please enter a valid numeric Review ID (up to 6 digits).")  
+            elif employee_id == "" or not employee_id.isdigit():  
+                st.error("Please enter a valid numeric Employee ID (up to 6 digits).")  
+            else:  
+                new_review = pd.DataFrame({  
+                    "review_id": [review_id],  
+                    "employee_id": [employee_id],  
+                    "review_date": [review_date.strftime('%Y-%m-%d')],  
+                    "reviewer": [reviewer],  
+                    "score": [score],  
+                    "comments": [comments]  
+                })  
+                st.session_state.performance = pd.concat([st.session_state.performance, new_review], ignore_index=True)  
+                st.success("Performance review recorded successfully!")  
+      
+    st.subheader("Performance Reviews Table")  
+    st.dataframe(st.session_state.performance)  
+    st.markdown(get_csv_download_link(st.session_state.performance, "performance.csv", "Download Performance CSV"), unsafe_allow_html=True)  
+    if st.button("Save Performance Data"):  
+        save_table("performance", st.session_state.performance)  
+  
+# -------------------------------  
+# 10. Module: Training Records  
+# -------------------------------  
+elif module == "Training Records":  
+    st.header("Training Records")  
+      
+    # CSV Upload option  
+    uploaded_training = st.file_uploader("Upload Training CSV", type="csv", key="training_upload")  
+    if uploaded_training is not None:  
+        st.session_state.training = load_from_uploaded_file(uploaded_training, training_columns)  
+        st.success("Training data uploaded successfully!")  
+      
+    with st.form("training_form"):  
+        col1, col2 = st.columns(2)  
+        with col1:  
+            training_id = st.text_input("Training ID (max 6 digits)", max_chars=6)  
+            employee_id = st.text_input("Employee ID (max 6 digits)", max_chars=6)  
+            course_name = st.text_input("Course Name")  
+        with col2:  
+            start_date = st.date_input("Start Date", datetime.date.today())  
+            end_date = st.date_input("End Date", datetime.date.today() + datetime.timedelta(days=30))  
+            status = st.selectbox("Status", ["Not Started", "In Progress", "Completed", "Failed"])  
+            certification = st.text_input("Certification")  
+        submitted_training = st.form_submit_button("Record Training")  
+        if submitted_training:  
+            if training_id == "" or not training_id.isdigit():  
+                st.error("Please enter a valid numeric Training ID (up to 6 digits).")  
+            elif employee_id == "" or not employee_id.isdigit():  
+                st.error("Please enter a valid numeric Employee ID (up to 6 digits).")  
+            else:  
+                new_training = pd.DataFrame({  
+                    "training_id": [training_id],  
+                    "employee_id": [employee_id],  
+                    "course_name": [course_name],  
+                    "start_date": [start_date.strftime('%Y-%m-%d')],  
+                    "end_date": [end_date.strftime('%Y-%m-%d')],  
+                    "status": [status],  
+                    "certification": [certification]  
+                })  
+                st.session_state.training = pd.concat([st.session_state.training, new_training], ignore_index=True)  
+                st.success("Training record added successfully!")  
+      
+    st.subheader("Training Records Table")  
+    
+    # Add table editing functionality
+    st.session_state.training = edit_table(st.session_state.training, "training")
+    st.dataframe(st.session_state.training)  
+    st.markdown(get_csv_download_link(st.session_state.training, "training.csv", "Download Training CSV"), unsafe_allow_html=True)  
+    if st.button("Save Training Data"):  
+        save_table("training", st.session_state.training)  
+  
+# -------------------------------  
+# 11. Module: Reports  
+# -------------------------------  
+elif module == "Reports":  
+    st.header("Reports")  
+      
+    report_type = st.selectbox(  
+        "Select Report Type",  
+        ["Employees by Department", "Performance Overview", "Training Completion", "Meeting Frequency"]  
+    )  
+      
+    if report_type == "Employees by Department" and not st.session_state.employees.empty:  
+        st.subheader("Employees by Department")  
+        dept_summary = st.session_state.employees['department'].value_counts().reset_index()  
+        dept_summary.columns = ['Department', 'Count']  
+          
+        st.dataframe(dept_summary)  
+          
+        # Plot  
+        fig, ax = plt.subplots(figsize=(10, 6))  
+        ax.bar(dept_summary['Department'], dept_summary['Count'], color='skyblue')  
+        ax.set_xlabel('Department')  
+        ax.set_ylabel('Number of Employees')  
+        ax.set_title('Employees by Department')  
+        plt.xticks(rotation=45, ha='right')  
+        st.pyplot(fig)  
+          
+        # Export option  
+        st.markdown(get_csv_download_link(dept_summary, "department_summary.csv", "Download Department Summary"), unsafe_allow_html=True)  
+          
+    elif report_type == "Performance Overview" and not st.session_state.performance.empty:  
+        st.subheader("Performance Overview")  
+        perf_overview = st.session_state.performance.groupby('employee_id')['score'].mean().reset_index()  
+        perf_overview['employee_name'] = perf_overview['employee_id'].apply(get_employee_display_name)  
+          
+        st.dataframe(perf_overview)  
+          
+        # Plot  
+        fig, ax = plt.subplots(figsize=(10, 6))  
+        ax.bar(perf_overview['employee_name'], perf_overview['score'], color='lightgreen')  
+        ax.set_xlabel('Employee')  
+        ax.set_ylabel('Average Performance Score')  
+        ax.set_title('Average Performance by Employee')  
+        plt.xticks(rotation=45, ha='right')  
+        plt.ylim(0, 5)  
+        st.pyplot(fig)  
+          
+        # Export option  
+        st.markdown(get_csv_download_link(perf_overview, "performance_overview.csv", "Download Performance Overview"), unsafe_allow_html=True)  
+          
+    elif report_type == "Training Completion" and not st.session_state.training.empty:  
+        st.subheader("Training Completion")  
+        training_status = pd.crosstab(st.session_state.training['course_name'], st.session_state.training['status'])  
+          
+        st.dataframe(training_status)  
           
         # Plot  
         fig, ax = plt.subplots(figsize=(10, 6))  
@@ -368,4 +491,4 @@ elif st.session_state.current_module == "Reports":
         st.pyplot(fig)  
           
         # Export option  
-        st.markdown(get_csv_download_link(meeting_freq, "meeting_frequency.csv", "Download Meeting Frequency"), unsafe_allow_html=True)
+        st.markdown(get_csv_download_link(meeting_freq, "meeting_frequency.csv", "Download Meeting Frequency"), unsafe_allow_html=True)  
