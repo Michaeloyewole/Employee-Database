@@ -388,7 +388,7 @@ elif module == "Reports":
     if st.button("Generate Report"):  
         if "employees" not in st.session_state or st.session_state.employees.empty:  
             st.error("No employee data available.")  
-            return  
+            st.stop()  
   
         # Filter data by date range  
         date_from_dt = pd.to_datetime(date_from)  
