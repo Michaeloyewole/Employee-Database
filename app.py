@@ -144,7 +144,158 @@ if module == "Employee Management":
     st.markdown(get_csv_download_link(st.session_state.employees, "employees.csv", "Download Employees CSV"), unsafe_allow_html=True)  
     if st.button("Save Employee Data"):  
         save_table("employees", st.session_state.employees)  
-  
+  def employees_page():  
+    st.title("Employees")  
+      
+    # Initialize session state for employees if not exists  
+    if 'employees' not in st.session_state:  
+        st.session_state.employees = load_table('employees', employee_columns)  
+      
+    # Create tabs for Add/Edit and View  
+    tab1, tab2 = st.tabs(["Add/Edit Employee", "View Employees"])  
+      
+    with tab1:  
+        # File uploader for bulk import  
+        uploaded_employees = st.file_uploader("Upload Employee CSV", type=['csv'])  
+        if uploaded_employees is not None:  
+            st.session_state.employees = load_from_uploaded_file(uploaded_employees, employee_columns)  
+            st.success("Employee data uploaded successfully!")  
+          
+        # Employee ID lookup for editing  
+        st.subheader("Edit Existing Employee")  
+        edit_employee_id = st.text_input("Enter Employee ID to Edit", key="edit_employee_id")  
+          
+        # Initialize form values  
+        employee_data = {col: "" for col in employee_columns}  
+        is_edit_mode = False  
+          
+        # If employee ID is provided, look up the employee data  
+        if edit_employee_id:  
+            employee_df = st.session_state.employees  
+            matching_employee = employee_df[employee_df['employee_id'] == edit_employee_id]  
+              
+            if not matching_employee.empty:  
+                # Populate form with existing data  
+                for col in employee_columns:  
+                    employee_data[col] = matching_employee[col].values[0]  
+                is_edit_mode = True  
+                st.success(f"Found employee: {employee_data['first_name']} {employee_data['last_name']}")  
+            else:  
+                st.warning(f"No employee found with ID: {edit_employee_id}")  
+          
+        # Employee form  
+        st.subheader("Employee Information")  
+        with st.form("employee_form"):  
+            col1, col2 = st.columns(2)  
+              
+            with col1:  
+                # If in edit mode, display the ID as read-only  
+                if is_edit_mode:  
+                    st.text_input("Employee ID", value=employee_data['employee_id'], disabled=True)  
+                    employee_id = employee_data['employee_id']  # Keep the original ID  
+                else:  
+                    employee_id = st.text_input("Employee ID (max 6 digits)",   
+                                               value=employee_data['employee_id'],   
+                                               max_chars=6)  
+                  
+                first_name = st.text_input("First Name", value=employee_data['first_name'])  
+                last_name = st.text_input("Last Name", value=employee_data['last_name'])  
+                department = st.text_input("Department", value=employee_data['department'])  
+              
+            with col2:  
+                job_title = st.text_input("Job Title", value=employee_data['job_title'])  
+                email = st.text_input("Email", value=employee_data['email'])  
+                phone = st.text_input("Phone", value=employee_data['phone'])  
+                employment_status = st.selectbox(  
+                    "Employment Status",  
+                    options=["Full-time", "Part-time", "Contract", "Terminated"],  
+                    index=["Full-time", "Part-time", "Contract", "Terminated"].index(employee_data['employment_status'])   
+                    if employee_data['employment_status'] in ["Full-time", "Part-time", "Contract", "Terminated"] else 0  
+                )  
+              
+            submit_button = st.form_submit_button("Save Employee")  
+              
+            if submit_button:  
+                if not employee_id or not first_name or not last_name:  
+                    st.error("Employee ID, First Name, and Last Name are required!")  
+                else:  
+                    # Create new employee record  
+                    new_employee = {  
+                        'employee_id': employee_id,  
+                        'first_name': first_name,  
+                        'last_name': last_name,  
+                        'department': department,  
+                        'job_title': job_title,  
+                        'email': email,  
+                        'phone': phone,  
+                        'employment_status': employment_status  
+                    }  
+                      
+                    # If editing, update the existing record  
+                    if is_edit_mode:  
+                        # Remove the old record  
+                        st.session_state.employees = st.session_state.employees[  
+                            st.session_state.employees['employee_id'] != employee_id  
+                        ]  
+                        # Add the updated record  
+                        st.session_state.employees = pd.concat([  
+                            st.session_state.employees,   
+                            pd.DataFrame([new_employee])  
+                        ], ignore_index=True)  
+                        st.success(f"Employee {employee_id} updated successfully!")  
+                    else:  
+                        # Check if employee ID already exists  
+                        if employee_id in st.session_state.employees['employee_id'].values:  
+                            st.error(f"Employee ID {employee_id} already exists!")  
+                        else:  
+                            # Add new employee  
+                            st.session_state.employees = pd.concat([  
+                                st.session_state.employees,   
+                                pd.DataFrame([new_employee])  
+                            ], ignore_index=True)  
+                            st.success("New employee added successfully!")  
+                      
+                    # Save to CSV  
+                    save_table('employees', st.session_state.employees)  
+                      
+                    # Clear the form after successful submission  
+                    st.experimental_rerun()  
+      
+    with tab2:  
+        # View and filter employees  
+        st.subheader("Employee Records")  
+          
+        # Filter options  
+        col1, col2 = st.columns(2)  
+        with col1:  
+            filter_dept = st.multiselect(  
+                "Filter by Department",  
+                options=sorted(st.session_state.employees['department'].unique()),  
+                default=[]  
+            )  
+          
+        with col2:  
+            filter_status = st.multiselect(  
+                "Filter by Employment Status",  
+                options=sorted(st.session_state.employees['employment_status'].unique()),  
+                default=[]  
+            )  
+          
+        # Apply filters  
+        filtered_df = st.session_state.employees  
+        if filter_dept:  
+            filtered_df = filtered_df[filtered_df['department'].isin(filter_dept)]  
+        if filter_status:  
+            filtered_df = filtered_df[filtered_df['employment_status'].isin(filter_status)]  
+          
+        # Display filtered dataframe  
+        st.dataframe(filtered_df)  
+          
+        # Download option  
+        st.markdown(  
+            get_csv_download_link(filtered_df, "employees.csv", "Download Filtered Employee Data"),  
+            unsafe_allow_html=True  
+        )  
 # -------------------------------  
 # 7. Module: One-on-One Meetings  
 # -------------------------------  
