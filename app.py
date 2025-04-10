@@ -200,43 +200,61 @@ elif module == "One-on-One Meetings":
 # -------------------------------  
 elif module == "Disciplinary Actions":  
     st.header("Disciplinary Actions")  
+    # Updated column structure for disciplinary actions:  
+    # ["Period (Date)", "disciplinary_id", "ID", "First Name", "Last Name", "Job Title",  
+    #  "Violation", "Interview Date", "Reason", "Comments", "Interviewer", "Decision"]  
       
     # CSV Upload option  
     uploaded_disciplinary = st.file_uploader("Upload Disciplinary CSV", type="csv", key="disciplinary_upload")  
     if uploaded_disciplinary is not None:  
-        st.session_state.disciplinary = load_from_uploaded_file(uploaded_disciplinary, disciplinary_columns)  
+        # When uploading, ensure the file has at least the required columns (if missing, fill with empty string)  
+        required_cols = ["Period (Date)", "disciplinary_id", "ID", "First Name", "Last Name",  
+                         "Job Title", "Violation", "Interview Date", "Reason", "Comments", "Interviewer", "Decision"]  
+        st.session_state.disciplinary = load_from_uploaded_file(uploaded_disciplinary, required_cols)  
         st.success("Disciplinary data uploaded successfully!")  
       
+    # Updated Form for Disciplinary Actions  
     with st.form("disciplinary_form"):  
-        col1, col2 = st.columns(2)  
+        st.subheader("Record Disciplinary Action")  
+          
+        col1, col2, col3 = st.columns(3)  
         with col1:  
+            period_date = st.date_input("Period (Date)", datetime.date.today())  
             disciplinary_id = st.text_input("Disciplinary ID (max 6 digits)", max_chars=6)  
-            employee_id = st.text_input("Employee ID (max 6 digits)", max_chars=6)  
-            d_date = st.date_input("Period", datetime.date.today())  
-            d_type = st.text_input("Violation")  
-            d_date = st.date_input("Interview Date", datetime.date.today())  
+            emp_id = st.text_input("ID (Employee ID - max 6 digits)", max_chars=6)  
+            first_name = st.text_input("First Name")  
         with col2:  
-            description = st.text_area("Reason")  
-            description = st.text_area("Action") 
-            description = st.text_area("Interviewer") 
-            description = st.text_area("Decision")
+            last_name = st.text_input("Last Name")  
+            job_title = st.text_input("Job Title")  
+            violation = st.text_input("Violation")  
+            interview_date = st.date_input("Interview Date", datetime.date.today())  
+        with col3:  
+            reason = st.text_area("Reason")  
+            comments = st.text_area("Comments")  
+            interviewer = st.text_input("Interviewer")  
+            decision = st.text_input("Decision")  
+          
         submitted_disc = st.form_submit_button("Record Disciplinary Action")  
         if submitted_disc:  
+            # Validate numeric inputs for IDs  
             if disciplinary_id == "" or not disciplinary_id.isdigit():  
                 st.error("Please enter a valid numeric Disciplinary ID (up to 6 digits).")  
-            elif employee_id == "" or not employee_id.isdigit():  
+            elif emp_id == "" or not emp_id.isdigit():  
                 st.error("Please enter a valid numeric Employee ID (up to 6 digits).")  
             else:  
                 new_disc = pd.DataFrame({  
+                    "Period (Date)": [period_date.strftime('%Y-%m-%d')],  
                     "disciplinary_id": [disciplinary_id],  
-                    "employee_id": [employee_id],  
-                    "Period": [d_date.strftime('%Y-%m-%d')],  
-                    "Violation": [d_type],  
-                    "Interview Date": [d_date.strftime('%Y-%m-%d')],  
-                    "Reason": [description], 
-                    "Action": [description], 
-                    "Interviewer": [description], 
-                    "Decision": [description] 
+                    "ID": [emp_id],  
+                    "First Name": [first_name],  
+                    "Last Name": [last_name],  
+                    "Job Title": [job_title],  
+                    "Violation": [violation],  
+                    "Interview Date": [interview_date.strftime('%Y-%m-%d')],  
+                    "Reason": [reason],  
+                    "Comments": [comments],  
+                    "Interviewer": [interviewer],  
+                    "Decision": [decision]  
                 })  
                 st.session_state.disciplinary = pd.concat([st.session_state.disciplinary, new_disc], ignore_index=True)  
                 st.success("Disciplinary action recorded successfully!")  
@@ -246,7 +264,6 @@ elif module == "Disciplinary Actions":
     st.markdown(get_csv_download_link(st.session_state.disciplinary, "disciplinary.csv", "Download Disciplinary CSV"), unsafe_allow_html=True)  
     if st.button("Save Disciplinary Data"):  
         save_table("disciplinary", st.session_state.disciplinary)  
-  
 # -------------------------------  
 # 9. Module: Performance Reviews  
 # -------------------------------  
