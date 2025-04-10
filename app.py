@@ -3,8 +3,7 @@ import streamlit as st
 import pandas as pd  
 import matplotlib.pyplot as plt  
 import datetime  
-import base64  
-from fpdf import FPDF  
+import base64   
   
 # -------------------------------  
 # 1. Page Config & Data Directory  
@@ -362,30 +361,6 @@ elif module == "Training Records":
 # -------------------------------  
 # 11. Module: Reports  
 # -------------------------------  
-PDF export function using FPDF  
-class PDFReport(FPDF):  
-    def header(self):  
-        self.set_font('Arial', 'B', 16)  
-        self.cell(0, 10, 'Employee Report', 0, 1, 'C')  
-        self.ln(10)  
-          
-    def footer(self):  
-        self.set_y(-15)  
-        self.set_font('Arial', 'I', 8)  
-        self.cell(0, 10, 'Page ' + str(self.page_no()), 0, 0, 'C')  
-          
-    def chapter_body(self, df):  
-        self.set_font('Arial', '', 12)  
-        for index, row in df.iterrows():  
-            line = str(row.to_dict())  
-            self.multi_cell(0, 10, line)  
-        self.ln()  
-          
-    def create_pdf(self, df, output_filename):  
-        self.add_page()  
-        self.chapter_body(df)  
-        self.output(output_filename)  
-  
 def export_report_csv(report_df):  
     link = get_csv_download_link(report_df, "report.csv", "Download Report as CSV")  
     st.markdown(link, unsafe_allow_html=True)  
