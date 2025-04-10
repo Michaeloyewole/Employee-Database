@@ -4,8 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt  
 import datetime  
 import base64  
-import ipywidgets as widgets  
-from IPython.display import display, HTML  
+
   
 # -------------------------------  
 # 1. Page Config & Data Directory  
