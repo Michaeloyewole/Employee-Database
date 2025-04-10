@@ -361,137 +361,155 @@ elif module == "Training Records":
 # -------------------------------  
 # 11. Module: Reports  
 # -------------------------------  
-def export_report_csv(report_df):  
-    link = get_csv_download_link(report_df, "report.csv", "Download Report as CSV")  
-    st.markdown(link, unsafe_allow_html=True)  
+def reports_page():  
+    st.title("Reports")  
   
-def export_report_pdf(report_df):  
-    pdf = PDFReport()  
-    output_filename = "report.pdf"  
-    pdf.create_pdf(report_df, output_filename)  
-    with open(output_filename, 'rb') as f:  
-        pdf_data = f.read()  
-    b64_pdf = base64.b64encode(pdf_data).decode()  
-    pdf_link = '<a href="data:application/octet-stream;base64,' + b64_pdf + '" download="' + output_filename + '">Download Report as PDF</a>'  
-    st.markdown(pdf_link, unsafe_allow_html=True)  
-    st.success("PDF report generated successfully")  
+    # Date range selection  
+    st.subheader("Select Date Range")  
+    col1, col2 = st.columns(2)  
+    with col1:  
+        date_from = st.date_input("From", datetime.date.today() - datetime.timedelta(days=30))  
+    with col2:  
+        date_to = st.date_input("To", datetime.date.today())  
   
-# Generate the report based on user selections  
-def generate_report(report_type, date_from, date_to, grouping_options):  
-    # Convert date selections to datetime  
-    date_from_dt = pd.to_datetime(date_from)  
-    date_to_dt = pd.to_datetime(date_to)  
-    report_df = pd.DataFrame()  # default empty DataFrame  
-      
-    if report_type == "Employee Activity":  
-        # Example: use the employees table from session_state if exists  
-        if "employees" in st.session_state and not st.session_state.employees.empty:  
-            df = st.session_state.employees.copy()  
-            if "date" in df.columns:  
-                df['date'] = pd.to_datetime(df['date'], errors='coerce')  
-                df = df[(df['date'] >= date_from_dt) & (df['date'] <= date_to_dt)]  
-            # Group by selected options  
-            group_cols = []  
-            for option in grouping_options:  
-                if option == "Employee" and "employee_id" in df.columns:  
-                    group_cols.append("employee_id")  
-                elif option == "Department" and "department" in df.columns:  
-                    group_cols.append("department")  
-                elif option == "Job Title" and "job_title" in df.columns:  
-                    group_cols.append("job_title")  
-            if group_cols:  
-                report_df = df.groupby(group_cols).size().reset_index(name="Count")  
-            else:  
-                report_df = df.copy()  
-            st.dataframe(report_df)  
-              
-            # Plot if count values exist  
-            if "Count" in report_df.columns and not report_df.empty:  
-                fig, ax = plt.subplots(figsize=(12, 8))  
-                ax.bar(report_df.index.astype(str), report_df["Count"], color='#2563EB')  
-                ax.set_xlabel("Group", labelpad=10)  
-                ax.set_ylabel("Count", labelpad=10)  
-                ax.set_title("Employee Activity Report", pad=15)  
-                ax.set_axisbelow(True)  
-                plt.xticks(rotation=45, ha="right")  
-                st.pyplot(fig)  
-        else:  
-            st.info("No employee data available.")  
-      
-    elif report_type == "Department Performance":  
-        # Here you may implement specific logic for department performance  
-        if "employees" in st.session_state and not st.session_state.employees.empty:  
-            df = st.session_state.employees.copy()  
-            if "date" in df.columns:  
-                df['date'] = pd.to_datetime(df['date'], errors='coerce')  
-                df = df[(df['date'] >= date_from_dt) & (df['date'] <= date_to_dt)]  
-            group_cols = []  
-            for option in grouping_options:  
-                if option == "Department" and "department" in df.columns:  
-                    group_cols.append("department")  
-                elif option == "Job Title" and "job_title" in df.columns:  
-                    group_cols.append("job_title")  
-            if group_cols:  
-                report_df = df.groupby(group_cols).size().reset_index(name="Count")  
-            else:  
-                report_df = df.copy()  
-            st.dataframe(report_df)  
-      
-    elif report_type == "Training Completion":  
-        if "training" in st.session_state and not st.session_state.training.empty:  
-            training_df = st.session_state.training.copy()  
-            if "date" in training_df.columns:  
-                training_df['date'] = pd.to_datetime(training_df['date'], errors='coerce')  
-                training_df = training_df[(training_df['date'] >= date_from_dt) & (training_df['date'] <= date_to_dt)]  
-              
-            if not training_df.empty:  
-                # Optionally merge with employees to get names, departments etc.  
-                if "employees" in st.session_state:  
-                    training_with_emp = training_df.merge(  
-                        st.session_state.employees[['employee_id', 'first_name', 'last_name']],  
-                        on='employee_id',  
-                        how='left'  
-                    )  
-                    training_with_emp['employee'] = training_with_emp['first_name'] + ' ' + training_with_emp['last_name']  
-                else:  
-                    training_with_emp = training_df.copy()  
-                  
-                training_completion = pd.crosstab(training_with_emp['course_name'], training_with_emp['status'])  
-                st.dataframe(training_completion)  
-                  
-                # Plot Training Completion  
-                fig, ax = plt.subplots(figsize=(12, 8))  
-                training_completion.plot(kind='bar', stacked=True, ax=ax)  
-                ax.set_xlabel("Course", labelpad=10)  
-                ax.set_ylabel("Count", labelpad=10)  
-                ax.set_title("Training Status by Course", pad=15)  
-                ax.set_axisbelow(True)  
-                plt.xticks(rotation=45, ha="right")  
-                plt.tight_layout()  
-                st.pyplot(fig)  
-                  
-                report_df = training_completion  
-            else:  
-                st.info("No training found for the selected date range.")  
-        else:  
-            st.info("No training data available.")  
-      
-    elif report_type == "Meeting Frequency":  
-        if "meetings" in st.session_state and not st.session_state.meetings.empty:  
-            meetings_df = st.session_state.meetings.copy()  
-            meetings_df['meeting_date'] = pd.to_datetime(meetings_df['meeting_date'], errors='coerce')  
-            meetings_df = meetings_df[(meetings_df['meeting_date'] >= date_from_dt) & (meetings_df['meeting_date'] <= date_to_dt)]  
-              
-            if not meetings_df.empty:  
-                # Merge with employee data to get group fields if available  
-                if "employees" in st.session_state:  
-                    meetings_with_emp = meetings_df.merge(  
+    # Report type selection  
+    report_type = st.selectbox(  
+        "Select Report Type",  
+        ["Employee Activity", "Department Performance", "Training Completion", "Meeting Frequency"]  
+    )  
+  
+    # Grouping options  
+    grouping_options = st.multiselect(  
+        "Group By",  
+        ["Employee", "Department", "Job Title"],  
+        default=["Employee"]  
+    )  
+  
+    if st.button("Generate Report"):  
+        if "employees" not in st.session_state or st.session_state.employees.empty:  
+            st.error("No employee data available.")  
+            return  
+  
+        # Filter data by date range  
+        date_from_dt = pd.to_datetime(date_from)  
+        date_to_dt = pd.to_datetime(date_to)  
+  
+        if report_type == "Employee Activity":  
+            if "activity" in st.session_state and not st.session_state.activity.empty:  
+                activity_df = st.session_state.activity.copy()  
+                activity_df['date'] = pd.to_datetime(activity_df['date'], errors='coerce')  
+                activity_df = activity_df[(activity_df['date'] >= date_from_dt) & (activity_df['date'] <= date_to_dt)]  
+  
+                if not activity_df.empty:  
+                    # Merge with employee data  
+                    activity_with_emp = activity_df.merge(  
                         st.session_state.employees[['employee_id', 'first_name', 'last_name', 'department', 'job_title']],  
                         on='employee_id', how='left'  
                     )  
-                    meetings_with_emp['employee'] = meetings_with_emp['first_name'] + ' ' + meetings_with_emp['last_name']  
+                    activity_with_emp['employee'] = activity_with_emp['first_name'] + ' ' + activity_with_emp['last_name']  
+  
+                    # Group by selected options  
+                    group_cols = []  
+                    for option in grouping_options:  
+                        if option == 'Employee' and 'employee' in activity_with_emp:  
+                            group_cols.append('employee')  
+                        elif option == 'Department' and 'department' in activity_with_emp:  
+                            group_cols.append('department')  
+                        elif option == 'Job Title' and 'job_title' in activity_with_emp:  
+                            group_cols.append('job_title')  
+  
+                    if group_cols:  
+                        activity_grouped = activity_with_emp.groupby(group_cols).size().reset_index(name='Count')  
+                        st.dataframe(activity_grouped)  
+  
+                        # Plot  
+                        fig, ax = plt.subplots(figsize=(12, 8))  
+                        activity_grouped.plot(kind='bar', x=group_cols[0], y='Count', ax=ax, color='#2563EB')  
+                        ax.set_xlabel("Group", labelpad=10)  
+                        ax.set_ylabel("Count", labelpad=10)  
+                        ax.set_title("Employee Activity Report", pad=15)  
+                        ax.set_axisbelow(True)  
+                        plt.xticks(rotation=45, ha='right')  
+                        plt.tight_layout()  
+                        st.pyplot(fig)  
+                    else:  
+                        st.info("No grouping options selected.")  
                 else:  
-                    meetings_with_emp = meetings_df.copy()  
-                      
-                # Add a month column for aggregation  
-                meetings_with_emp['month']
+                    st.info("No activity found for the selected date range.")  
+            else:  
+                st.info("No activity data available.")  
+  
+        elif report_type == "Department Performance":  
+            # Similar logic for department performance  
+            pass  
+  
+        elif report_type == "Training Completion":  
+            if "training" in st.session_state and not st.session_state.training.empty:  
+                training_df = st.session_state.training.copy()  
+                training_df['date'] = pd.to_datetime(training_df['date'], errors='coerce')  
+                training_df = training_df[(training_df['date'] >= date_from_dt) & (training_df['date'] <= date_to_dt)]  
+  
+                if not training_df.empty:  
+                    # Merge with employee data  
+                    training_with_emp = training_df.merge(  
+                        st.session_state.employees[['employee_id', 'first_name', 'last_name', 'department', 'job_title']],  
+                        on='employee_id', how='left'  
+                    )  
+                    training_with_emp['employee'] = training_with_emp['first_name'] + ' ' + training_with_emp['last_name']  
+  
+                    training_completion = pd.crosstab(training_with_emp['course_name'], training_with_emp['status'])  
+                    st.dataframe(training_completion)  
+  
+                    # Plot  
+                    fig, ax = plt.subplots(figsize=(12, 8))  
+                    training_completion.plot(kind='bar', stacked=True, ax=ax)  
+                    ax.set_xlabel("Course", labelpad=10)  
+                    ax.set_ylabel("Count", labelpad=10)  
+                    ax.set_title("Training Status by Course", pad=15)  
+                    ax.set_axisbelow(True)  
+                    plt.xticks(rotation=45, ha='right')  
+                    plt.tight_layout()  
+                    st.pyplot(fig)  
+                else:  
+                    st.info("No training found for the selected date range.")  
+            else:  
+                st.info("No training data available.")  
+  
+        elif report_type == "Meeting Frequency":  
+            if "meetings" in st.session_state and not st.session_state.meetings.empty:  
+                meetings_df = st.session_state.meetings.copy()  
+                meetings_df['meeting_date'] = pd.to_datetime(meetings_df['meeting_date'], errors='coerce')  
+                meetings_df = meetings_df[(meetings_df['meeting_date'] >= date_from_dt) & (meetings_df['meeting_date'] <= date_to_dt)]  
+  
+                if not meetings_df.empty:  
+                    # Add month column for grouping  
+                    meetings_df['month'] = meetings_df['meeting_date'].dt.strftime('%Y-%m')  
+  
+                    meeting_freq = meetings_df.groupby('month').size().reset_index(name='Count')  
+                    st.dataframe(meeting_freq)  
+  
+                    # Plot  
+                    fig, ax = plt.subplots(figsize=(12, 8))  
+                    ax.bar(meeting_freq['month'], meeting_freq['Count'], color='#2563EB')  
+                    ax.set_xlabel("Month", labelpad=10)  
+                    ax.set_ylabel("Number of Meetings", labelpad=10)  
+                    ax.set_title("Meeting Frequency by Month", pad=15)  
+                    ax.set_axisbelow(True)  
+                    plt.xticks(rotation=45, ha='right')  
+                    plt.tight_layout()  
+                    st.pyplot(fig)  
+                else:  
+                    st.info("No meetings found for the selected date range.")  
+            else:  
+                st.info("No meeting data available.")  
+  
+    # Export options  
+    st.subheader("Export Report")  
+    if st.button("Export to CSV"):  
+        if "report_df" in locals():  
+            csv = report_df.to_csv(index=False)  
+            b64 = base64.b64encode(csv.encode()).decode()  
+            href = f'<a href="data:file/csv;base64,{b64}" download="report.csv">Download CSV File</a>'  
+            st.markdown(href, unsafe_allow_html=True)  
+        else:  
+            st.error("No report data to export.")  
