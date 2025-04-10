@@ -53,46 +53,42 @@ def get_employee_display_name(employee_id):
 def load_from_uploaded_file(uploaded_file, columns):  
     try:  
         df = pd.read_csv(uploaded_file)  
+        # Ensure all required columns exist  
         for col in columns:  
             if col not in df.columns:  
                 df[col] = ""  
         return df  
     except Exception as e:  
-        st.error("Error loading file: " + str(e))  
+        st.error(f"Error loading file: {e}")  
         return pd.DataFrame({col: [] for col in columns})  
   
 # -------------------------------  
 # 4. Initialize Session State  
 # -------------------------------  
-# Define columns for each table  
-employee_columns = ['employee_id', 'first_name', 'last_name', 'department', 'position', 'email', 'phone', 'employment_status']  
-meeting_columns = ['meeting_id', 'employee_id', 'meeting_date', 'meeting_time', 'Meeting Agenda', 'action_items', 'notes', 'next_meeting_date']  
-performance_columns = ['review_id', 'employee_id', 'review_date', 'reviewer', 'performance_rating', 'strengths', 'areas_for_improvement', 'goals', 'comments']  
-training_columns = ['training_id', 'employee_id', 'course_name', 'start_date', 'end_date', 'status', 'certification', 'score']  
-disciplinary_columns = ['disciplinary_id', 'employee_id', 'type', 'date', 'description']  
+employee_columns = ["employee_id", "first_name", "last_name", "department", "job_title", "email", "phone", "employment_status"]  
+meeting_columns = ["meeting_id", "employee_id", "meeting_date", "meeting_time", "Meeting Agenda", "action_items", "notes", "next_meeting_date"]  
+disciplinary_columns = ["disciplinary_id", "employee_id", "type", "date", "description"]  
+performance_columns = ["review_id", "employee_id", "review_date", "reviewer", "score", "comments"]  
+training_columns = ["training_id", "employee_id", "course_name", "start_date", "end_date", "status", "certification"]  
   
-# Initialize session state variables if they don't exist  
 if 'employees' not in st.session_state:  
-    st.session_state.employees = load_table('employees', employee_columns)  
+    st.session_state.employees = load_table("employees", employee_columns)  
 if 'meetings' not in st.session_state:  
-    st.session_state.meetings = load_table('meetings', meeting_columns)  
-if 'performance' not in st.session_state:  
-    st.session_state.performance = load_table('performance', performance_columns)  
-if 'training' not in st.session_state:  
-    st.session_state.training = load_table('training', training_columns)  
+    st.session_state.meetings = load_table("meetings", meeting_columns)  
 if 'disciplinary' not in st.session_state:  
-    st.session_state.disciplinary = load_table('disciplinary', disciplinary_columns)  
+    st.session_state.disciplinary = load_table("disciplinary", disciplinary_columns)  
+if 'performance' not in st.session_state:  
+    st.session_state.performance = load_table("performance", performance_columns)  
+if 'training' not in st.session_state:  
+    st.session_state.training = load_table("training", training_columns)  
   
 # -------------------------------  
 # 5. Sidebar Navigation  
 # -------------------------------  
 st.sidebar.title("Employee Records Tool")  
-  
-# Use radio buttons for module selection instead of selectbox  
-module = st.sidebar.radio(  
+module = st.sidebar.selectbox(  
     "Select Module",  
-    ["Employee Management", "One-on-One Meetings", "Performance Reviews",   
-     "Training Records", "Disciplinary Actions", "Reports"]  
+    ["Employee Management", "One-on-One Meetings", "Disciplinary Actions", "Performance Reviews", "Training Records", "Reports"]  
 )  
   
 # -------------------------------  
@@ -101,99 +97,52 @@ module = st.sidebar.radio(
 if module == "Employee Management":  
     st.header("Employee Management")  
       
-    # CSV Upload option for Employees  
+    # CSV Upload option  
     uploaded_employees = st.file_uploader("Upload Employees CSV", type="csv", key="employee_upload")  
     if uploaded_employees is not None:  
         st.session_state.employees = load_from_uploaded_file(uploaded_employees, employee_columns)  
         st.success("Employee data uploaded successfully!")  
       
-    # Search and Delete functionality  
-    st.subheader("Search Employee")  
-    search_col1, search_col2, search_col3 = st.columns([2, 1, 1])  
-    with search_col1:  
-        search_id = st.text_input("Enter Employee ID to search")  
-      
-    employee_found = None  
-    if search_id and search_id.isdigit():  
-        search_id_int = int(search_id)  
-        employee_found = st.session_state.employees[st.session_state.employees['employee_id'] == search_id_int]  
-          
-        if not employee_found.empty:  
-            with search_col2:  
-                if st.button("Delete Record"):  
-                    st.session_state.employees = st.session_state.employees[st.session_state.employees['employee_id'] != search_id_int]  
-                    st.success(f"Employee ID {search_id} deleted!")  
-                    employee_found = None  
-                    search_id = ""  
-        else:  
-            st.warning(f"No employee found with ID {search_id}")  
-      
-    # Employee Form  
-    st.subheader("Add/Edit Employee")  
     with st.form("employee_form"):  
         col1, col2 = st.columns(2)  
-          
-        # Auto-populate fields if employee found  
-        first_name_val = ""  
-        last_name_val = ""  
-        department_val = ""  
-        position_val = ""  
-        email_val = ""  
-        phone_val = ""  
-        employment_status_val = "Active"  
-          
-        if employee_found is not None and not employee_found.empty:  
-            first_name_val = employee_found['first_name'].values[0]  
-            last_name_val = employee_found['last_name'].values[0]  
-            department_val = employee_found['department'].values[0]  
-            position_val = employee_found['position'].values[0]  
-            email_val = employee_found['email'].values[0]  
-            phone_val = employee_found['phone'].values[0]  
-            employment_status_val = employee_found['employment_status'].values[0]  
-          
         with col1:  
-            employee_id = st.text_input("Employee ID (max 6 digits)", value=search_id, max_chars=6)  
-            first_name = st.text_input("First Name", value=first_name_val)  
-            last_name = st.text_input("Last Name", value=last_name_val)  
-            department = st.text_input("Department", value=department_val)  
-          
+            employee_id = st.text_input("Employee ID (max 6 digits)", max_chars=6)  
+            first_name = st.text_input("First Name")  
+            last_name = st.text_input("Last Name")  
+            department = st.text_input("Department")  
         with col2:  
-            position = st.text_input("Position", value=position_val)  
-            email = st.text_input("Email", value=email_val)  
-            phone = st.text_input("Phone", value=phone_val)  
-            employment_status = st.selectbox("Employment Status",   
-                                            ["Active", "On Leave", "Terminated", "Retired"],  
-                                            index=["Active", "On Leave", "Terminated", "Retired"].index(employment_status_val) if employment_status_val in ["Active", "On Leave", "Terminated", "Retired"] else 0)  
+            job_title = st.text_input("Job Title")  
+            email = st.text_input("Email")  
+            phone = st.text_input("Phone")  
+            employment_status = st.selectbox("Employment Status", ["Active", "Inactive", "On Leave", "Terminated"])  
           
-        submitted = st.form_submit_button("Save Employee")  
-        if submitted:  
+        submitted_employee = st.form_submit_button("Add/Update Employee")  
+        if submitted_employee:  
             if employee_id == "" or not employee_id.isdigit():  
                 st.error("Please enter a valid numeric Employee ID (up to 6 digits).")  
-            elif first_name == "" or last_name == "":  
-                st.error("First name and last name are required.")  
             else:  
                 new_employee = pd.DataFrame({  
-                    "employee_id": [int(employee_id)],  
+                    "employee_id": [employee_id],  
                     "first_name": [first_name],  
                     "last_name": [last_name],  
                     "department": [department],  
-                    "position": [position],  
+                    "job_title": [job_title],  
                     "email": [email],  
                     "phone": [phone],  
                     "employment_status": [employment_status],  
                 })  
                   
-                # Update employee if exists  
-                emp_id_int = int(employee_id)  
-                if emp_id_int in st.session_state.employees['employee_id'].values:  
-                    st.session_state.employees = st.session_state.employees[st.session_state.employees['employee_id'] != emp_id_int]  
+                # Check if employee already exists  
+                if int(employee_id) in st.session_state.employees['employee_id'].values:  
+                    st.session_state.employees = st.session_state.employees[st.session_state.employees['employee_id'] != int(employee_id)]  
+                  
                 st.session_state.employees = pd.concat([st.session_state.employees, new_employee], ignore_index=True)  
-                st.success("Employee record added/updated!")  
+                st.success("Employee added/updated successfully!")  
       
     st.subheader("Employees Table")  
     st.dataframe(st.session_state.employees)  
     st.markdown(get_csv_download_link(st.session_state.employees, "employees.csv", "Download Employees CSV"), unsafe_allow_html=True)  
-    if st.button("Save Employees Data"):  
+    if st.button("Save Employee Data"):  
         save_table("employees", st.session_state.employees)  
   
 # -------------------------------  
@@ -202,86 +151,24 @@ if module == "Employee Management":
 elif module == "One-on-One Meetings":  
     st.header("One-on-One Meetings")  
       
-    # CSV Upload option for Meetings  
-    uploaded_meetings = st.file_uploader("Upload Meetings CSV", type="csv", key="meeting_upload")  
+    # CSV Upload option  
+    uploaded_meetings = st.file_uploader("Upload Meetings CSV", type="csv", key="meetings_upload")  
     if uploaded_meetings is not None:  
         st.session_state.meetings = load_from_uploaded_file(uploaded_meetings, meeting_columns)  
         st.success("Meetings data uploaded successfully!")  
       
-    # Search and Delete functionality  
-    st.subheader("Search Meeting")  
-    search_col1, search_col2, search_col3 = st.columns([2, 1, 1])  
-    with search_col1:  
-        search_meeting_id = st.text_input("Enter Meeting ID to search")  
-      
-    meeting_found = None  
-    if search_meeting_id and search_meeting_id.isdigit():  
-        search_id_int = int(search_meeting_id)  
-        meeting_found = st.session_state.meetings[st.session_state.meetings['meeting_id'] == search_id_int]  
-          
-        if not meeting_found.empty:  
-            with search_col2:  
-                if st.button("Delete Meeting"):  
-                    st.session_state.meetings = st.session_state.meetings[st.session_state.meetings['meeting_id'] != search_id_int]  
-                    st.success(f"Meeting ID {search_meeting_id} deleted!")  
-                    meeting_found = None  
-                    search_meeting_id = ""  
-        else:  
-            st.warning(f"No meeting found with ID {search_meeting_id}")  
-      
     with st.form("meeting_form"):  
         col1, col2 = st.columns(2)  
-          
-        # Auto-populate fields if meeting found  
-        employee_id_val = ""  
-        meeting_date_val = datetime.date.today()  
-        meeting_time_val = datetime.time(9, 0)  
-        meeting_agenda_val = ""  
-        action_items_val = ""  
-        notes_val = ""  
-        next_meeting_date_val = datetime.date.today()  
-          
-        if meeting_found is not None and not meeting_found.empty:  
-            employee_id_val = str(meeting_found['employee_id'].values[0])  
-              
-            # Handle date conversion  
-            try:  
-                meeting_date_str = meeting_found['meeting_date'].values[0]  
-                if isinstance(meeting_date_str, str):  
-                    meeting_date_val = datetime.datetime.strptime(meeting_date_str, '%Y-%m-%d').date()  
-            except:  
-                meeting_date_val = datetime.date.today()  
-                  
-            # Handle time conversion  
-            try:  
-                meeting_time_str = meeting_found['meeting_time'].values[0]  
-                if isinstance(meeting_time_str, str):  
-                    meeting_time_val = datetime.datetime.strptime(meeting_time_str, '%H:%M:%S').time()  
-            except:  
-                meeting_time_val = datetime.time(9, 0)  
-                  
-            meeting_agenda_val = meeting_found['Meeting Agenda'].values[0]  
-            action_items_val = meeting_found['action_items'].values[0]  
-            notes_val = meeting_found['notes'].values[0]  
-              
-            # Handle next meeting date conversion  
-            try:  
-                next_date_str = meeting_found['next_meeting_date'].values[0]  
-                if isinstance(next_date_str, str):  
-                    next_meeting_date_val = datetime.datetime.strptime(next_date_str, '%Y-%m-%d').date()  
-            except:  
-                next_meeting_date_val = datetime.date.today()  
-          
         with col1:  
-            meeting_id = st.text_input("Meeting ID (max 6 digits)", value=search_meeting_id, max_chars=6)  
-            employee_id = st.text_input("Employee ID (max 6 digits)", value=employee_id_val, max_chars=6)  
-            meeting_date = st.date_input("Meeting Date", value=meeting_date_val)  
-            meeting_time = st.time_input("Meeting Time", value=meeting_time_val)  
+            meeting_id = st.text_input("Meeting ID (max 6 digits)", max_chars=6)  
+            employee_id = st.text_input("Employee ID (max 6 digits)", max_chars=6)  
+            meeting_date = st.date_input("Meeting Date", datetime.date.today())  
+            meeting_time = st.time_input("Meeting Time", datetime.time(9, 0))  
         with col2:  
-            meeting_agenda = st.text_area("Meeting Agenda", value=meeting_agenda_val)  
-            action_items = st.text_area("Action Items", value=action_items_val)  
-            notes = st.text_area("Notes", value=notes_val)  
-            next_meeting_date = st.date_input("Next Meeting Date", value=next_meeting_date_val)  
+            meeting_agenda = st.text_area("Meeting Agenda")  
+            action_items = st.text_area("Action Items")  
+            notes = st.text_area("Notes")  
+            next_meeting_date = st.date_input("Next Meeting Date", datetime.date.today())  
         submitted_meeting = st.form_submit_button("Record Meeting")  
         if submitted_meeting:  
             if meeting_id == "" or not meeting_id.isdigit():  
@@ -290,8 +177,8 @@ elif module == "One-on-One Meetings":
                 st.error("Please enter a valid numeric Employee ID (up to 6 digits).")  
             else:  
                 new_meeting = pd.DataFrame({  
-                    "meeting_id": [int(meeting_id)],  
-                    "employee_id": [int(employee_id)],  
+                    "meeting_id": [meeting_id],  
+                    "employee_id": [employee_id],  
                     "meeting_date": [meeting_date.strftime('%Y-%m-%d')],  
                     "meeting_time": [meeting_time.strftime('%H:%M:%S')],  
                     "Meeting Agenda": [meeting_agenda],  
@@ -299,11 +186,6 @@ elif module == "One-on-One Meetings":
                     "notes": [notes],  
                     "next_meeting_date": [next_meeting_date.strftime('%Y-%m-%d')]  
                 })  
-                  
-                # Update meeting if exists  
-                meeting_id_int = int(meeting_id)  
-                if meeting_id_int in st.session_state.meetings['meeting_id'].values:  
-                    st.session_state.meetings = st.session_state.meetings[st.session_state.meetings['meeting_id'] != meeting_id_int]  
                 st.session_state.meetings = pd.concat([st.session_state.meetings, new_meeting], ignore_index=True)  
                 st.success("Meeting recorded successfully!")  
       
@@ -314,113 +196,86 @@ elif module == "One-on-One Meetings":
         save_table("meetings", st.session_state.meetings)  
   
 # -------------------------------  
-# 8. Module: Performance Reviews  
+# 8. Module: Disciplinary Actions  
+# -------------------------------  
+elif module == "Disciplinary Actions":  
+    st.header("Disciplinary Actions")  
+      
+    # CSV Upload option  
+    uploaded_disciplinary = st.file_uploader("Upload Disciplinary CSV", type="csv", key="disciplinary_upload")  
+    if uploaded_disciplinary is not None:  
+        st.session_state.disciplinary = load_from_uploaded_file(uploaded_disciplinary, disciplinary_columns)  
+        st.success("Disciplinary data uploaded successfully!")  
+      
+    with st.form("disciplinary_form"):  
+        col1, col2 = st.columns(2)  
+        with col1:  
+            disciplinary_id = st.text_input("Disciplinary ID (max 6 digits)", max_chars=6)  
+            employee_id = st.text_input("Employee ID (max 6 digits)", max_chars=6)  
+            d_type = st.text_input("Type")  
+        with col2:  
+            d_date = st.date_input("Date", datetime.date.today())  
+            description = st.text_area("Description")  
+        submitted_disc = st.form_submit_button("Record Disciplinary Action")  
+        if submitted_disc:  
+            if disciplinary_id == "" or not disciplinary_id.isdigit():  
+                st.error("Please enter a valid numeric Disciplinary ID (up to 6 digits).")  
+            elif employee_id == "" or not employee_id.isdigit():  
+                st.error("Please enter a valid numeric Employee ID (up to 6 digits).")  
+            else:  
+                new_disc = pd.DataFrame({  
+                    "disciplinary_id": [disciplinary_id],  
+                    "employee_id": [employee_id],  
+                    "type": [d_type],  
+                    "date": [d_date.strftime('%Y-%m-%d')],  
+                    "description": [description]  
+                })  
+                st.session_state.disciplinary = pd.concat([st.session_state.disciplinary, new_disc], ignore_index=True)  
+                st.success("Disciplinary action recorded successfully!")  
+      
+    st.subheader("Disciplinary Actions Table")  
+    st.dataframe(st.session_state.disciplinary)  
+    st.markdown(get_csv_download_link(st.session_state.disciplinary, "disciplinary.csv", "Download Disciplinary CSV"), unsafe_allow_html=True)  
+    if st.button("Save Disciplinary Data"):  
+        save_table("disciplinary", st.session_state.disciplinary)  
+  
+# -------------------------------  
+# 9. Module: Performance Reviews  
 # -------------------------------  
 elif module == "Performance Reviews":  
     st.header("Performance Reviews")  
       
-    # CSV Upload option for Performance  
+    # CSV Upload option  
     uploaded_performance = st.file_uploader("Upload Performance CSV", type="csv", key="performance_upload")  
     if uploaded_performance is not None:  
         st.session_state.performance = load_from_uploaded_file(uploaded_performance, performance_columns)  
         st.success("Performance data uploaded successfully!")  
       
-    # Search and Delete functionality  
-    st.subheader("Search Performance Review")  
-    search_col1, search_col2, search_col3 = st.columns([2, 1, 1])  
-    with search_col1:  
-        search_review_id = st.text_input("Enter Review ID to search")  
-      
-    review_found = None  
-    if search_review_id and search_review_id.isdigit():  
-        search_id_int = int(search_review_id)  
-        review_found = st.session_state.performance[st.session_state.performance['review_id'] == search_id_int]  
-          
-        if not review_found.empty:  
-            with search_col2:  
-                if st.button("Delete Review"):  
-                    st.session_state.performance = st.session_state.performance[st.session_state.performance['review_id'] != search_id_int]  
-                    st.success(f"Review ID {search_review_id} deleted!")  
-                    review_found = None  
-                    search_review_id = ""  
-        else:  
-            st.warning(f"No review found with ID {search_review_id}")  
-      
     with st.form("performance_form"):  
         col1, col2 = st.columns(2)  
-          
-        # Auto-populate fields if review found  
-        employee_id_val = ""  
-        review_date_val = datetime.date.today()  
-        reviewer_val = ""  
-        performance_rating_val = 3  
-        strengths_val = ""  
-        areas_for_improvement_val = ""  
-        goals_val = ""  
-        comments_val = ""  
-          
-        if review_found is not None and not review_found.empty:  
-            employee_id_val = str(review_found['employee_id'].values[0])  
-              
-            # Handle date conversion  
-            try:  
-                review_date_str = review_found['review_date'].values[0]  
-                if isinstance(review_date_str, str):  
-                    review_date_val = datetime.datetime.strptime(review_date_str, '%Y-%m-%d').date()  
-            except:  
-                review_date_val = datetime.date.today()  
-                  
-            reviewer_val = review_found['reviewer'].values[0]  
-              
-            # Handle rating conversion  
-            try:  
-                rating = review_found['performance_rating'].values[0]  
-                if isinstance(rating, (int, float)):  
-                    performance_rating_val = int(rating)  
-                elif isinstance(rating, str) and rating.isdigit():  
-                    performance_rating_val = int(rating)  
-            except:  
-                performance_rating_val = 3  
-                  
-            strengths_val = review_found['strengths'].values[0]  
-            areas_for_improvement_val = review_found['areas_for_improvement'].values[0]  
-            goals_val = review_found['goals'].values[0]  
-            comments_val = review_found['comments'].values[0]  
-          
         with col1:  
-            review_id = st.text_input("Review ID (max 6 digits)", value=search_review_id, max_chars=6)  
-            employee_id = st.text_input("Employee ID (max 6 digits)", value=employee_id_val, max_chars=6)  
-            review_date = st.date_input("Review Date", value=review_date_val)  
-            reviewer = st.text_input("Reviewer", value=reviewer_val)  
+            review_id = st.text_input("Review ID (max 6 digits)", max_chars=6)  
+            employee_id = st.text_input("Employee ID (max 6 digits)", max_chars=6)  
+            review_date = st.date_input("Review Date", datetime.date.today())  
         with col2:  
-            performance_rating = st.slider("Performance Rating (1-5)", 1, 5, value=performance_rating_val)  
-            strengths = st.text_area("Strengths", value=strengths_val)  
-            areas_for_improvement = st.text_area("Areas for Improvement", value=areas_for_improvement_val)  
-            goals = st.text_area("Goals", value=goals_val)  
-            comments = st.text_area("Comments", value=comments_val)  
-        submitted_perf = st.form_submit_button("Record Performance Review")  
-        if submitted_perf:  
+            reviewer = st.text_input("Reviewer")  
+            score = st.slider("Score", 1, 5, 3)  
+            comments = st.text_area("Comments")  
+        submitted_review = st.form_submit_button("Record Performance Review")  
+        if submitted_review:  
             if review_id == "" or not review_id.isdigit():  
                 st.error("Please enter a valid numeric Review ID (up to 6 digits).")  
             elif employee_id == "" or not employee_id.isdigit():  
                 st.error("Please enter a valid numeric Employee ID (up to 6 digits).")  
             else:  
                 new_review = pd.DataFrame({  
-                    "review_id": [int(review_id)],  
-                    "employee_id": [int(employee_id)],  
+                    "review_id": [review_id],  
+                    "employee_id": [employee_id],  
                     "review_date": [review_date.strftime('%Y-%m-%d')],  
                     "reviewer": [reviewer],  
-                    "performance_rating": [performance_rating],  
-                    "strengths": [strengths],  
-                    "areas_for_improvement": [areas_for_improvement],  
-                    "goals": [goals],  
+                    "score": [score],  
                     "comments": [comments]  
                 })  
-                  
-                # Update review if exists  
-                review_id_int = int(review_id)  
-                if review_id_int in st.session_state.performance['review_id'].values:  
-                    st.session_state.performance = st.session_state.performance[st.session_state.performance['review_id'] != review_id_int]  
                 st.session_state.performance = pd.concat([st.session_state.performance, new_review], ignore_index=True)  
                 st.success("Performance review recorded successfully!")  
       
@@ -431,108 +286,44 @@ elif module == "Performance Reviews":
         save_table("performance", st.session_state.performance)  
   
 # -------------------------------  
-# 9. Module: Training Records  
+# 10. Module: Training Records  
 # -------------------------------  
 elif module == "Training Records":  
     st.header("Training Records")  
       
-    # CSV Upload option for Training  
+    # CSV Upload option  
     uploaded_training = st.file_uploader("Upload Training CSV", type="csv", key="training_upload")  
     if uploaded_training is not None:  
         st.session_state.training = load_from_uploaded_file(uploaded_training, training_columns)  
         st.success("Training data uploaded successfully!")  
       
-    # Search and Delete functionality  
-    st.subheader("Search Training Record")  
-    search_col1, search_col2, search_col3 = st.columns([2, 1, 1])  
-    with search_col1:  
-        search_training_id = st.text_input("Enter Training ID to search")  
-      
-    training_found = None  
-    if search_training_id and search_training_id.isdigit():  
-        search_id_int = int(search_training_id)  
-        training_found = st.session_state.training[st.session_state.training['training_id'] == search_id_int]  
-          
-        if not training_found.empty:  
-            with search_col2:  
-                if st.button("Delete Training"):  
-                    st.session_state.training = st.session_state.training[st.session_state.training['training_id'] != search_id_int]  
-                    st.success(f"Training ID {search_training_id} deleted!")  
-                    training_found = None  
-                    search_training_id = ""  
-        else:  
-            st.warning(f"No training found with ID {search_training_id}")  
-      
     with st.form("training_form"):  
         col1, col2 = st.columns(2)  
-          
-        # Auto-populate fields if training found  
-        employee_id_val = ""  
-        course_name_val = ""  
-        start_date_val = datetime.date.today()  
-        end_date_val = datetime.date.today() + datetime.timedelta(days=30)  
-        status_val = "Enrolled"  
-        certification_val = ""  
-        score_val = ""  
-          
-        if training_found is not None and not training_found.empty:  
-            employee_id_val = str(training_found['employee_id'].values[0])  
-            course_name_val = training_found['course_name'].values[0]  
-              
-            # Handle date conversions  
-            try:  
-                start_date_str = training_found['start_date'].values[0]  
-                if isinstance(start_date_str, str):  
-                    start_date_val = datetime.datetime.strptime(start_date_str, '%Y-%m-%d').date()  
-            except:  
-                start_date_val = datetime.date.today()  
-                  
-            try:  
-                end_date_str = training_found['end_date'].values[0]  
-                if isinstance(end_date_str, str):  
-                    end_date_val = datetime.datetime.strptime(end_date_str, '%Y-%m-%d').date()  
-            except:  
-                end_date_val = datetime.date.today() + datetime.timedelta(days=30)  
-                  
-            status_val = training_found['status'].values[0]  
-            certification_val = training_found['certification'].values[0]  
-            score_val = str(training_found['score'].values[0])  
-          
         with col1:  
-            training_id = st.text_input("Training ID (max 6 digits)", value=search_training_id, max_chars=6)  
-            employee_id = st.text_input("Employee ID (max 6 digits)", value=employee_id_val, max_chars=6)  
-            course_name = st.text_input("Course Name", value=course_name_val)  
-            start_date = st.date_input("Start Date", value=start_date_val)  
+            training_id = st.text_input("Training ID (max 6 digits)", max_chars=6)  
+            employee_id = st.text_input("Employee ID (max 6 digits)", max_chars=6)  
+            course_name = st.text_input("Course Name")  
         with col2:  
-            end_date = st.date_input("End Date", value=end_date_val)  
-            status = st.selectbox("Status", ["Enrolled", "In Progress", "Completed", "Failed", "Withdrawn"],   
-                                index=["Enrolled", "In Progress", "Completed", "Failed", "Withdrawn"].index(status_val) if status_val in ["Enrolled", "In Progress", "Completed", "Failed", "Withdrawn"] else 0)  
-            certification = st.text_input("Certification", value=certification_val)  
-            score = st.text_input("Score", value=score_val)  
+            start_date = st.date_input("Start Date", datetime.date.today())  
+            end_date = st.date_input("End Date", datetime.date.today() + datetime.timedelta(days=30))  
+            status = st.selectbox("Status", ["Not Started", "In Progress", "Completed", "Failed"])  
+            certification = st.text_input("Certification")  
         submitted_training = st.form_submit_button("Record Training")  
         if submitted_training:  
             if training_id == "" or not training_id.isdigit():  
                 st.error("Please enter a valid numeric Training ID (up to 6 digits).")  
             elif employee_id == "" or not employee_id.isdigit():  
                 st.error("Please enter a valid numeric Employee ID (up to 6 digits).")  
-            elif course_name == "":  
-                st.error("Course name is required.")  
             else:  
                 new_training = pd.DataFrame({  
-                    "training_id": [int(training_id)],  
-                    "employee_id": [int(employee_id)],  
+                    "training_id": [training_id],  
+                    "employee_id": [employee_id],  
                     "course_name": [course_name],  
                     "start_date": [start_date.strftime('%Y-%m-%d')],  
                     "end_date": [end_date.strftime('%Y-%m-%d')],  
                     "status": [status],  
-                    "certification": [certification],  
-                    "score": [score]  
+                    "certification": [certification]  
                 })  
-                  
-                # Update training if exists  
-                training_id_int = int(training_id)  
-                if training_id_int in st.session_state.training['training_id'].values:  
-                    st.session_state.training = st.session_state.training[st.session_state.training['training_id'] != training_id_int]  
                 st.session_state.training = pd.concat([st.session_state.training, new_training], ignore_index=True)  
                 st.success("Training record added successfully!")  
       
@@ -543,60 +334,96 @@ elif module == "Training Records":
         save_table("training", st.session_state.training)  
   
 # -------------------------------  
-# 10. Module: Disciplinary Actions  
+# 11. Module: Reports  
 # -------------------------------  
-elif module == "Disciplinary Actions":  
-    st.header("Disciplinary Actions")  
+elif module == "Reports":  
+    st.header("Reports")  
       
-    # CSV Upload option for Disciplinary  
-    uploaded_disciplinary = st.file_uploader("Upload Disciplinary CSV", type="csv", key="disciplinary_upload")  
-    if uploaded_disciplinary is not None:  
-        st.session_state.disciplinary = load_from_uploaded_file(uploaded_disciplinary, disciplinary_columns)  
-        st.success("Disciplinary data uploaded successfully!")  
+    report_type = st.selectbox(  
+        "Select Report Type",  
+        ["Employees by Department", "Performance Overview", "Training Completion", "Meeting Frequency"]  
+    )  
       
-    # Search and Delete functionality  
-    st.subheader("Search Disciplinary Record")  
-    search_col1, search_col2, search_col3 = st.columns([2, 1, 1])  
-    with search_col1:  
-        search_disciplinary_id = st.text_input("Enter Disciplinary ID to search")  
-      
-    disciplinary_found = None  
-    if search_disciplinary_id and search_disciplinary_id.isdigit():  
-        search_id_int = int(search_disciplinary_id)  
-        disciplinary_found = st.session_state.disciplinary[st.session_state.disciplinary['disciplinary_id'] == search_id_int]  
+    if report_type == "Employees by Department" and not st.session_state.employees.empty:  
+        st.subheader("Employees by Department")  
+        dept_summary = st.session_state.employees['department'].value_counts().reset_index()  
+        dept_summary.columns = ['Department', 'Count']  
           
-        if not disciplinary_found.empty:  
-            with search_col2:  
-                if st.button("Delete Disciplinary"):  
-                    st.session_state.disciplinary = st.session_state.disciplinary[st.session_state.disciplinary['disciplinary_id'] != search_id_int]  
-                    st.success(f"Disciplinary ID {search_disciplinary_id} deleted!")  
-                    disciplinary_found = None  
-                    search_disciplinary_id = ""  
-        else:  
-            st.warning(f"No disciplinary record found with ID {search_disciplinary_id}")  
-      
-    with st.form("disciplinary_form"):  
-        col1, col2 = st.columns(2)  
+        st.dataframe(dept_summary)  
           
-        # Auto-populate fields if disciplinary found  
-        employee_id_val = ""  
-        d_type_val = ""  
-        d_date_val = datetime.date.today()  
-        description_val = ""  
+        # Plot  
+        fig, ax = plt.subplots(figsize=(10, 6))  
+        ax.bar(dept_summary['Department'], dept_summary['Count'], color='skyblue')  
+        ax.set_xlabel('Department')  
+        ax.set_ylabel('Number of Employees')  
+        ax.set_title('Employees by Department')  
+        plt.xticks(rotation=45, ha='right')  
+        st.pyplot(fig)  
           
-        if disciplinary_found is not None and not disciplinary_found.empty:  
-            employee_id_val = str(disciplinary_found['employee_id'].values[0])  
-            d_type_val = disciplinary_found['type'].values[0]  
-              
-            # Handle date conversion  
-            try:  
-                d_date_str = disciplinary_found['date'].values[0]  
-                if isinstance(d_date_str, str):  
-                    d_date_val = datetime.datetime.strptime(d_date_str, '%Y-%m-%d').date()  
-            except:  
-                d_date_val = datetime.date.today()  
-                  
-            description_val = disciplinary_found['description'].values[0]  
+        # Export option  
+        st.markdown(get_csv_download_link(dept_summary, "department_summary.csv", "Download Department Summary"), unsafe_allow_html=True)  
           
-        with col1:  
-            disciplinary_id = st.text_input("Disciplinary ID (max 6 digits)", value=search
+    elif report_type == "Performance Overview" and not st.session_state.performance.empty:  
+        st.subheader("Performance Overview")  
+        perf_overview = st.session_state.performance.groupby('employee_id')['score'].mean().reset_index()  
+        perf_overview['employee_name'] = perf_overview['employee_id'].apply(get_employee_display_name)  
+          
+        st.dataframe(perf_overview)  
+          
+        # Plot  
+        fig, ax = plt.subplots(figsize=(10, 6))  
+        ax.bar(perf_overview['employee_name'], perf_overview['score'], color='lightgreen')  
+        ax.set_xlabel('Employee')  
+        ax.set_ylabel('Average Performance Score')  
+        ax.set_title('Average Performance by Employee')  
+        plt.xticks(rotation=45, ha='right')  
+        plt.ylim(0, 5)  
+        st.pyplot(fig)  
+          
+        # Export option  
+        st.markdown(get_csv_download_link(perf_overview, "performance_overview.csv", "Download Performance Overview"), unsafe_allow_html=True)  
+          
+    elif report_type == "Training Completion" and not st.session_state.training.empty:  
+        st.subheader("Training Completion")  
+        training_status = pd.crosstab(st.session_state.training['course_name'], st.session_state.training['status'])  
+          
+        st.dataframe(training_status)  
+          
+        # Plot  
+        fig, ax = plt.subplots(figsize=(10, 6))  
+        training_status.plot(kind='bar', stacked=True, ax=ax)  
+        ax.set_xlabel('Course')  
+        ax.set_ylabel('Count')  
+        ax.set_title('Training Status by Course')  
+        plt.xticks(rotation=45, ha='right')  
+        plt.legend(title='Status')  
+        st.pyplot(fig)  
+          
+        # Export option  
+        st.markdown(get_csv_download_link(training_status.reset_index(), "training_completion.csv", "Download Training Completion"), unsafe_allow_html=True)  
+          
+    elif report_type == "Meeting Frequency" and not st.session_state.meetings.empty:  
+        st.subheader("Meeting Frequency")  
+          
+        # Convert meeting_date to datetime if it's not already  
+        if st.session_state.meetings['meeting_date'].dtype == 'object':  
+            st.session_state.meetings['meeting_date'] = pd.to_datetime(st.session_state.meetings['meeting_date'])  
+          
+        # Group by month and count  
+        meeting_freq = st.session_state.meetings.groupby(pd.Grouper(key='meeting_date', freq='M')).size().reset_index()  
+        meeting_freq.columns = ['Month', 'Count']  
+        meeting_freq['Month'] = meeting_freq['Month'].dt.strftime('%Y-%m')  
+          
+        st.dataframe(meeting_freq)  
+          
+        # Plot  
+        fig, ax = plt.subplots(figsize=(10, 6))  
+        ax.bar(meeting_freq['Month'], meeting_freq['Count'], color='coral')  
+        ax.set_xlabel('Month')  
+        ax.set_ylabel('Number of Meetings')  
+        ax.set_title('Meeting Frequency by Month')  
+        plt.xticks(rotation=45, ha='right')  
+        st.pyplot(fig)  
+          
+        # Export option  
+        st.markdown(get_csv_download_link(meeting_freq, "meeting_frequency.csv", "Download Meeting Frequency"), unsafe_allow_html=True)  
