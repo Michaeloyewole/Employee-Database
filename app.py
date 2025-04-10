@@ -4,7 +4,6 @@ import pandas as pd
 import matplotlib.pyplot as plt  
 import datetime  
 import base64  
-from fpdf import FPDF  
 import ipywidgets as widgets  
 from IPython.display import display, HTML  
   
