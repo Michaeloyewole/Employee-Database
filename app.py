@@ -361,155 +361,132 @@ elif module == "Training Records":
 # -------------------------------  
 # 11. Module: Reports  
 # -------------------------------  
-def reports_page():  
-    st.title("Reports")  
+report_options = [  
+    "Employees by Employment Status",  
+    "Disciplinary Actions by Violations",  
+    "Disciplinary Actions per Employee",  
+    "Training per Employee",  
+    "Training Completion",  
+    "Performance per Employee"  
+]  
   
-    # Date range selection  
-    st.subheader("Select Date Range")  
-    col1, col2 = st.columns(2)  
-    with col1:  
-        date_from = st.date_input("From", datetime.date.today() - datetime.timedelta(days=30))  
-    with col2:  
-        date_to = st.date_input("To", datetime.date.today())  
+report_type = st.selectbox("Select Report Type", report_options)  
   
-    # Report type selection  
-    report_type = st.selectbox(  
-        "Select Report Type",  
-        ["Employee Activity", "Department Performance", "Training Completion", "Meeting Frequency"]  
-    )  
+if report_type == "Employees by Employment Status" and not st.session_state.employees.empty:  
+    st.subheader("Employees by Employment Status")  
+    emp_status = st.session_state.employees['employment_status'].value_counts().reset_index()  
+    emp_status.columns = ['Employment Status', 'Count']  
+      
+    st.dataframe(emp_status)  
+      
+    fig, ax = plt.subplots(figsize=(12, 8))  
+    ax.bar(emp_status['Employment Status'], emp_status['Count'], color='#2563EB')  
+    ax.set_xlabel("Employment Status", labelpad=10)  
+    ax.set_ylabel("Count", labelpad=10)  
+    ax.set_title("Employees by Employment Status", pad=15)  
+    ax.set_axisbelow(True)  
+    plt.xticks(rotation=45, ha='right')  
+    plt.tight_layout()  
+    st.pyplot(fig)  
+      
+    st.markdown(get_csv_download_link(emp_status, "employees_by_status.csv", "Download Employees by Status"), unsafe_allow_html=True)  
   
-    # Grouping options  
-    grouping_options = st.multiselect(  
-        "Group By",  
-        ["Employee", "Department", "Job Title"],  
-        default=["Employee"]  
-    )  
+elif report_type == "Disciplinary Actions by Violations" and not st.session_state.disciplinary.empty:  
+    st.subheader("Disciplinary Actions by Violations")  
+    disp_by_violation = st.session_state.disciplinary['violation'].value_counts().reset_index()  
+    disp_by_violation.columns = ['Violation', 'Count']  
+      
+    st.dataframe(disp_by_violation)  
+      
+    fig, ax = plt.subplots(figsize=(12, 8))  
+    ax.bar(disp_by_violation['Violation'], disp_by_violation['Count'], color='#24EB84')  
+    ax.set_xlabel("Violation", labelpad=10)  
+    ax.set_ylabel("Count", labelpad=10)  
+    ax.set_title("Disciplinary Actions by Violations", pad=15)  
+    ax.set_axisbelow(True)  
+    plt.xticks(rotation=45, ha='right')  
+    plt.tight_layout()  
+    st.pyplot(fig)  
+      
+    st.markdown(get_csv_download_link(disp_by_violation, "disciplinary_by_violations.csv", "Download Disciplinary by Violations"), unsafe_allow_html=True)  
   
-    if st.button("Generate Report"):  
-        if "employees" not in st.session_state or st.session_state.employees.empty:  
-            st.error("No employee data available.")  
-            return  
+elif report_type == "Disciplinary Actions per Employee" and not st.session_state.disciplinary.empty:  
+    st.subheader("Disciplinary Actions per Employee")  
+    disp_per_emp = st.session_state.disciplinary.groupby('employee_id').size().reset_index(name='Count')  
+    # Optional: Map to employee names if available  
+    disp_per_emp['Employee Name'] = disp_per_emp['employee_id'].apply(lambda x: get_employee_display_name(x))  
+      
+    st.dataframe(disp_per_emp[['Employee Name', 'Count']])  
+      
+    fig, ax = plt.subplots(figsize=(12, 8))  
+    ax.bar(disp_per_emp['Employee Name'], disp_per_emp['Count'], color='#B2EB24')  
+    ax.set_xlabel("Employee", labelpad=10)  
+    ax.set_ylabel("Disciplinary Actions", labelpad=10)  
+    ax.set_title("Disciplinary Actions per Employee", pad=15)  
+    ax.set_axisbelow(True)  
+    plt.xticks(rotation=45, ha='right')  
+    plt.tight_layout()  
+    st.pyplot(fig)  
+      
+    st.markdown(get_csv_download_link(disp_per_emp, "disciplinary_per_employee.csv", "Download Disciplinary per Employee"), unsafe_allow_html=True)  
   
-        # Filter data by date range  
-        date_from_dt = pd.to_datetime(date_from)  
-        date_to_dt = pd.to_datetime(date_to)  
+elif report_type == "Training per Employee" and not st.session_state.training.empty:  
+    st.subheader("Training per Employee")  
+    training_per_emp = st.session_state.training.groupby('employee_id').size().reset_index(name='Training Count')  
+    training_per_emp['Employee Name'] = training_per_emp['employee_id'].apply(lambda x: get_employee_display_name(x))  
+      
+    st.dataframe(training_per_emp[['Employee Name', 'Training Count']])  
+      
+    fig, ax = plt.subplots(figsize=(12, 8))  
+    ax.bar(training_per_emp['Employee Name'], training_per_emp['Training Count'], color='#D324EB')  
+    ax.set_xlabel("Employee", labelpad=10)  
+    ax.set_ylabel("Training Count", labelpad=10)  
+    ax.set_title("Training per Employee", pad=15)  
+    ax.set_axisbelow(True)  
+    plt.xticks(rotation=45, ha='right')  
+    plt.tight_layout()  
+    st.pyplot(fig)  
+      
+    st.markdown(get_csv_download_link(training_per_emp, "training_per_employee.csv", "Download Training per Employee"), unsafe_allow_html=True)  
   
-        if report_type == "Employee Activity":  
-            if "activity" in st.session_state and not st.session_state.activity.empty:  
-                activity_df = st.session_state.activity.copy()  
-                activity_df['date'] = pd.to_datetime(activity_df['date'], errors='coerce')  
-                activity_df = activity_df[(activity_df['date'] >= date_from_dt) & (activity_df['date'] <= date_to_dt)]  
+elif report_type == "Training Completion" and not st.session_state.training.empty:  
+    st.subheader("Training Completion")  
+    training_status = pd.crosstab(st.session_state.training['course_name'], st.session_state.training['status'])  
+      
+    st.dataframe(training_status)  
+      
+    fig, ax = plt.subplots(figsize=(12, 8))  
+    training_status.plot(kind='bar', stacked=True, ax=ax)  
+    ax.set_xlabel('Course', labelpad=10)  
+    ax.set_ylabel('Count', labelpad=10)  
+    ax.set_title('Training Status by Course', pad=15)  
+    plt.xticks(rotation=45, ha='right')  
+    ax.set_axisbelow(True)  
+    plt.tight_layout()  
+    st.pyplot(fig)  
+      
+    st.markdown(get_csv_download_link(training_status.reset_index(), "training_completion.csv", "Download Training Completion"), unsafe_allow_html=True)  
   
-                if not activity_df.empty:  
-                    # Merge with employee data  
-                    activity_with_emp = activity_df.merge(  
-                        st.session_state.employees[['employee_id', 'first_name', 'last_name', 'department', 'job_title']],  
-                        on='employee_id', how='left'  
-                    )  
-                    activity_with_emp['employee'] = activity_with_emp['first_name'] + ' ' + activity_with_emp['last_name']  
-  
-                    # Group by selected options  
-                    group_cols = []  
-                    for option in grouping_options:  
-                        if option == 'Employee' and 'employee' in activity_with_emp:  
-                            group_cols.append('employee')  
-                        elif option == 'Department' and 'department' in activity_with_emp:  
-                            group_cols.append('department')  
-                        elif option == 'Job Title' and 'job_title' in activity_with_emp:  
-                            group_cols.append('job_title')  
-  
-                    if group_cols:  
-                        activity_grouped = activity_with_emp.groupby(group_cols).size().reset_index(name='Count')  
-                        st.dataframe(activity_grouped)  
-  
-                        # Plot  
-                        fig, ax = plt.subplots(figsize=(12, 8))  
-                        activity_grouped.plot(kind='bar', x=group_cols[0], y='Count', ax=ax, color='#2563EB')  
-                        ax.set_xlabel("Group", labelpad=10)  
-                        ax.set_ylabel("Count", labelpad=10)  
-                        ax.set_title("Employee Activity Report", pad=15)  
-                        ax.set_axisbelow(True)  
-                        plt.xticks(rotation=45, ha='right')  
-                        plt.tight_layout()  
-                        st.pyplot(fig)  
-                    else:  
-                        st.info("No grouping options selected.")  
-                else:  
-                    st.info("No activity found for the selected date range.")  
-            else:  
-                st.info("No activity data available.")  
-  
-        elif report_type == "Department Performance":  
-            # Similar logic for department performance  
-            pass  
-  
-        elif report_type == "Training Completion":  
-            if "training" in st.session_state and not st.session_state.training.empty:  
-                training_df = st.session_state.training.copy()  
-                training_df['date'] = pd.to_datetime(training_df['date'], errors='coerce')  
-                training_df = training_df[(training_df['date'] >= date_from_dt) & (training_df['date'] <= date_to_dt)]  
-  
-                if not training_df.empty:  
-                    # Merge with employee data  
-                    training_with_emp = training_df.merge(  
-                        st.session_state.employees[['employee_id', 'first_name', 'last_name', 'department', 'job_title']],  
-                        on='employee_id', how='left'  
-                    )  
-                    training_with_emp['employee'] = training_with_emp['first_name'] + ' ' + training_with_emp['last_name']  
-  
-                    training_completion = pd.crosstab(training_with_emp['course_name'], training_with_emp['status'])  
-                    st.dataframe(training_completion)  
-  
-                    # Plot  
-                    fig, ax = plt.subplots(figsize=(12, 8))  
-                    training_completion.plot(kind='bar', stacked=True, ax=ax)  
-                    ax.set_xlabel("Course", labelpad=10)  
-                    ax.set_ylabel("Count", labelpad=10)  
-                    ax.set_title("Training Status by Course", pad=15)  
-                    ax.set_axisbelow(True)  
-                    plt.xticks(rotation=45, ha='right')  
-                    plt.tight_layout()  
-                    st.pyplot(fig)  
-                else:  
-                    st.info("No training found for the selected date range.")  
-            else:  
-                st.info("No training data available.")  
-  
-        elif report_type == "Meeting Frequency":  
-            if "meetings" in st.session_state and not st.session_state.meetings.empty:  
-                meetings_df = st.session_state.meetings.copy()  
-                meetings_df['meeting_date'] = pd.to_datetime(meetings_df['meeting_date'], errors='coerce')  
-                meetings_df = meetings_df[(meetings_df['meeting_date'] >= date_from_dt) & (meetings_df['meeting_date'] <= date_to_dt)]  
-  
-                if not meetings_df.empty:  
-                    # Add month column for grouping  
-                    meetings_df['month'] = meetings_df['meeting_date'].dt.strftime('%Y-%m')  
-  
-                    meeting_freq = meetings_df.groupby('month').size().reset_index(name='Count')  
-                    st.dataframe(meeting_freq)  
-  
-                    # Plot  
-                    fig, ax = plt.subplots(figsize=(12, 8))  
-                    ax.bar(meeting_freq['month'], meeting_freq['Count'], color='#2563EB')  
-                    ax.set_xlabel("Month", labelpad=10)  
-                    ax.set_ylabel("Number of Meetings", labelpad=10)  
-                    ax.set_title("Meeting Frequency by Month", pad=15)  
-                    ax.set_axisbelow(True)  
-                    plt.xticks(rotation=45, ha='right')  
-                    plt.tight_layout()  
-                    st.pyplot(fig)  
-                else:  
-                    st.info("No meetings found for the selected date range.")  
-            else:  
-                st.info("No meeting data available.")  
-  
-    # Export options  
-    st.subheader("Export Report")  
-    if st.button("Export to CSV"):  
-        if "report_df" in locals():  
-            csv = report_df.to_csv(index=False)  
-            b64 = base64.b64encode(csv.encode()).decode()  
-            href = f'<a href="data:file/csv;base64,{b64}" download="report.csv">Download CSV File</a>'  
-            st.markdown(href, unsafe_allow_html=True)  
-        else:  
-            st.error("No report data to export.")  
+elif report_type == "Performance per Employee" and not st.session_state.performance.empty:  
+    st.subheader("Performance per Employee")  
+    perf_per_emp = st.session_state.performance.groupby('employee_id')['performance_rating'].mean().reset_index()  
+    perf_per_emp['Employee Name'] = perf_per_emp['employee_id'].apply(lambda x: get_employee_display_name(x))  
+      
+    st.dataframe(perf_per_emp[['Employee Name', 'performance_rating']])  
+      
+    fig, ax = plt.subplots(figsize=(12, 8))  
+    ax.bar(perf_per_emp['Employee Name'], perf_per_emp['performance_rating'], color='#EB3424')  
+    ax.set_xlabel("Employee", labelpad=10)  
+    ax.set_ylabel("Average Performance Rating", labelpad=10)  
+    ax.set_title("Performance per Employee", pad=15)  
+    ax.set_axisbelow(True)  
+    plt.xticks(rotation=45, ha='right')  
+    plt.tight_layout()  
+    st.pyplot(fig)  
+      
+    st.markdown(get_csv_download_link(perf_per_emp, "performance_per_employee.csv", "Download Performance per Employee"), unsafe_allow_html=True)  
+      
+else:  
+    st.info("No data available for the selected report or report type not implemented.")  
+      
+print('Modified report module with new report types.')   
