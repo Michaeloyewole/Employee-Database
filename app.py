@@ -352,14 +352,14 @@ elif module == "One-on-One Meetings":
 elif module == "Disciplinary Actions":  
     st.header("Disciplinary Actions")  
     # Updated column structure for disciplinary actions:  
-    # ["Period (Date)", "disciplinary_id", "ID", "First Name", "Last Name", "Job Title",  
+    # ["Period (Date)", "disciplinary_id", "ID", "Job Title",  
     #  "Violation", "Interview Date", "Reason", "Comments", "Interviewer", "Decision"]  
       
     # CSV Upload option  
     uploaded_disciplinary = st.file_uploader("Upload Disciplinary CSV", type="csv", key="disciplinary_upload")  
     if uploaded_disciplinary is not None:  
         # When uploading, ensure the file has at least the required columns (if missing, fill with empty string)  
-        required_cols = ["Period (Date)", "disciplinary_id", "ID", "First Name", "Last Name",  
+        required_cols = ["Period (Date)", "disciplinary_id", "ID",  
                          "Job Title", "Violation", "Interview Date", "Reason", "Comments", "Interviewer", "Decision"]  
         st.session_state.disciplinary = load_from_uploaded_file(uploaded_disciplinary, required_cols)  
         st.success("Disciplinary data uploaded successfully!")  
@@ -372,10 +372,8 @@ elif module == "Disciplinary Actions":
         with col1:  
             period_date = st.date_input("Period (Date)", datetime.date.today())  
             disciplinary_id = st.text_input("Disciplinary ID (max 6 digits)", max_chars=6)  
-            emp_id = st.text_input("ID (Employee ID - max 6 digits)", max_chars=6)  
-            first_name = st.text_input("First Name")  
+            emp_id = st.text_input("ID (Employee ID - max 6 digits)", max_chars=6)   
         with col2:  
-            last_name = st.text_input("Last Name")  
             job_title = st.text_input("Job Title")  
             violation = st.text_input("Violation")  
             interview_date = st.date_input("Interview Date", datetime.date.today())  
@@ -397,8 +395,6 @@ elif module == "Disciplinary Actions":
                     "Period (Date)": [period_date.strftime('%Y-%m-%d')],  
                     "disciplinary_id": [disciplinary_id],  
                     "ID": [emp_id],  
-                    "First Name": [first_name],  
-                    "Last Name": [last_name],  
                     "Job Title": [job_title],  
                     "Violation": [violation],  
                     "Interview Date": [interview_date.strftime('%Y-%m-%d')],  
