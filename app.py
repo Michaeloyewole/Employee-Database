@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt  
 import datetime  
 import base64  
-
+from fpdf import FPDF  
   
 # -------------------------------  
 # 1. Page Config & Data Directory  
@@ -27,30 +27,6 @@ def get_csv_download_link(df, filename, label='Download CSV file'):
     csv = df.to_csv(index=False)  
     b64 = base64.b64encode(csv.encode()).decode()  
     return f'<a href="data:file/csv;base64,{b64}" download="{filename}">{label}</a>'  
-
-# PDF export function using FPDF  
-class PDFReport(FPDF):  
-    def header(self):  
-        self.set_font('Arial', 'B', 16)  
-        self.cell(0, 10, 'Employee Report', 0, 1, 'C')  
-        self.ln(10)  
-  
-    def footer(self):  
-        self.set_y(-15)  
-        self.set_font('Arial', 'I', 8)  
-        self.cell(0, 10, 'Page ' + str(self.page_no()), 0, 0, 'C')  
-  
-    def chapter_body(self, df):  
-        self.set_font('Arial', '', 12)  
-        for index, row in df.iterrows():  
-            line = str(row.to_dict())  
-            self.multi_cell(0, 10, line)  
-        self.ln()  
-  
-    def create_pdf(self, df, output_filename):  
-        self.add_page()  
-        self.chapter_body(df)  
-        self.output(output_filename)  
   
 # -------------------------------  
 # 3. Data Persistence Functions  
@@ -386,112 +362,161 @@ elif module == "Training Records":
 # -------------------------------  
 # 11. Module: Reports  
 # -------------------------------  
-def generate_report(data):  
-    display(HTML('<h2>Robust Report Module</h2>'))  
-      
-    # Date range selection widgets  
-    today = datetime.date.today()  
-    default_from = today - datetime.timedelta(days=30)  
-    date_from_picker = widgets.DatePicker(description='Date From', value=default_from)  
-    date_to_picker = widgets.DatePicker(description='Date To', value=today)  
-      
-    # Grouping Options widget  
-    grouping_options = widgets.SelectMultiple(  
-        options=['Employee', 'Department', 'Job Title'],  
-        value=['Employee'],  
-        description='Group by',  
-        disabled=False  
-    )  
-      
-    # Export option widget  
-    export_dropdown = widgets.Dropdown(  
-        options=['None', 'CSV', 'PDF'],  
-        value='None',  
-        description='Export Format',  
-        disabled=False,  
-    )  
+PDF export function using FPDF  
+class PDFReport(FPDF):  
+    def header(self):  
+        self.set_font('Arial', 'B', 16)  
+        self.cell(0, 10, 'Employee Report', 0, 1, 'C')  
+        self.ln(10)  
+          
+    def footer(self):  
+        self.set_y(-15)  
+        self.set_font('Arial', 'I', 8)  
+        self.cell(0, 10, 'Page ' + str(self.page_no()), 0, 0, 'C')  
+          
+    def chapter_body(self, df):  
+        self.set_font('Arial', '', 12)  
+        for index, row in df.iterrows():  
+            line = str(row.to_dict())  
+            self.multi_cell(0, 10, line)  
+        self.ln()  
+          
+    def create_pdf(self, df, output_filename):  
+        self.add_page()  
+        self.chapter_body(df)  
+        self.output(output_filename)  
   
-    # Button to trigger report generation  
-    generate_button = widgets.Button(description='Generate Report')  
-    output_area = widgets.Output()  
+def export_report_csv(report_df):  
+    link = get_csv_download_link(report_df, "report.csv", "Download Report as CSV")  
+    st.markdown(link, unsafe_allow_html=True)  
   
-    def on_generate_clicked(b):  
-        with output_area:  
-            output_area.clear_output()  
-            # Retrieve date range  
-            date_from = date_from_picker.value  
-            date_to = date_to_picker.value  
-            if date_from is None or date_to is None:  
-                print('Please select both start and end dates.')  
-                return  
-              
-            # Filter dataframe based on date (expects a "date" column)  
-            if 'date' in data.columns:  
-                df = data.copy()  
-                df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.date  
-                mask = (df['date'] >= date_from) & (df['date'] <= date_to)  
-                report_df = df.loc[mask].copy()  
-            else:  
-                print('No date column found in data. Showing full data.')  
-                report_df = data.copy()  
-                  
-            # Determine grouping based on selected options  
-            selected_groupings = list(grouping_options.value)  
+def export_report_pdf(report_df):  
+    pdf = PDFReport()  
+    output_filename = "report.pdf"  
+    pdf.create_pdf(report_df, output_filename)  
+    with open(output_filename, 'rb') as f:  
+        pdf_data = f.read()  
+    b64_pdf = base64.b64encode(pdf_data).decode()  
+    pdf_link = '<a href="data:application/octet-stream;base64,' + b64_pdf + '" download="' + output_filename + '">Download Report as PDF</a>'  
+    st.markdown(pdf_link, unsafe_allow_html=True)  
+    st.success("PDF report generated successfully")  
+  
+# Generate the report based on user selections  
+def generate_report(report_type, date_from, date_to, grouping_options):  
+    # Convert date selections to datetime  
+    date_from_dt = pd.to_datetime(date_from)  
+    date_to_dt = pd.to_datetime(date_to)  
+    report_df = pd.DataFrame()  # default empty DataFrame  
+      
+    if report_type == "Employee Activity":  
+        # Example: use the employees table from session_state if exists  
+        if "employees" in st.session_state and not st.session_state.employees.empty:  
+            df = st.session_state.employees.copy()  
+            if "date" in df.columns:  
+                df['date'] = pd.to_datetime(df['date'], errors='coerce')  
+                df = df[(df['date'] >= date_from_dt) & (df['date'] <= date_to_dt)]  
+            # Group by selected options  
             group_cols = []  
-            for option in selected_groupings:  
-                if option == 'Employee' and 'employee' in report_df.columns:  
-                    group_cols.append('employee')  
-                elif option == 'Department' and 'department' in report_df.columns:  
-                    group_cols.append('department')  
-                elif option == 'Job Title' and 'job_title' in report_df.columns:  
-                    group_cols.append('job_title')  
-                      
+            for option in grouping_options:  
+                if option == "Employee" and "employee_id" in df.columns:  
+                    group_cols.append("employee_id")  
+                elif option == "Department" and "department" in df.columns:  
+                    group_cols.append("department")  
+                elif option == "Job Title" and "job_title" in df.columns:  
+                    group_cols.append("job_title")  
             if group_cols:  
-                report_grouped = report_df.groupby(group_cols).size().reset_index(name='Count')  
+                report_df = df.groupby(group_cols).size().reset_index(name="Count")  
             else:  
-                report_grouped = report_df.copy()  
+                report_df = df.copy()  
+            st.dataframe(report_df)  
               
-            print('Report Data:')  
-            display(report_grouped)  
-              
-            # Plotting report if a "Count" column is available  
-            if 'Count' in report_grouped.columns and not report_grouped.empty:  
+            # Plot if count values exist  
+            if "Count" in report_df.columns and not report_df.empty:  
                 fig, ax = plt.subplots(figsize=(12, 8))  
-                ax.bar(report_grouped.index.astype(str), report_grouped['Count'], color='#2563EB')  
-                ax.set_xlabel('Group', labelpad=10)  
-                ax.set_ylabel('Count', labelpad=10)  
-                ax.set_title('Report Grouped by ' + ', '.join(selected_groupings), pad=15)  
+                ax.bar(report_df.index.astype(str), report_df["Count"], color='#2563EB')  
+                ax.set_xlabel("Group", labelpad=10)  
+                ax.set_ylabel("Count", labelpad=10)  
+                ax.set_title("Employee Activity Report", pad=15)  
                 ax.set_axisbelow(True)  
-                plt.xticks(rotation=45, ha='right')  
-                plt.show()  
-              
-            # Handle export options  
-            export_format = export_dropdown.value  
-            if export_format == 'CSV':  
-                display(get_csv_download_link(report_grouped, 'report.csv', 'Download Report as CSV'))  
-            elif export_format == 'PDF':  
-                pdf = PDFReport()  
-                output_filename = 'report.pdf'  
-                pdf.create_pdf(report_grouped, output_filename)  
-                with open(output_filename, 'rb') as f:  
-                    pdf_data = f.read()  
-                b64_pdf = base64.b64encode(pdf_data).decode()  
-                pdf_link = '<a href="data:application/octet-stream;base64,' + b64_pdf + '" download="' + output_filename + '">Download Report as PDF</a>'  
-                display(HTML(pdf_link))  
-                print('PDF report generated successfully')  
+                plt.xticks(rotation=45, ha="right")  
+                st.pyplot(fig)  
+        else:  
+            st.info("No employee data available.")  
+      
+    elif report_type == "Department Performance":  
+        # Here you may implement specific logic for department performance  
+        if "employees" in st.session_state and not st.session_state.employees.empty:  
+            df = st.session_state.employees.copy()  
+            if "date" in df.columns:  
+                df['date'] = pd.to_datetime(df['date'], errors='coerce')  
+                df = df[(df['date'] >= date_from_dt) & (df['date'] <= date_to_dt)]  
+            group_cols = []  
+            for option in grouping_options:  
+                if option == "Department" and "department" in df.columns:  
+                    group_cols.append("department")  
+                elif option == "Job Title" and "job_title" in df.columns:  
+                    group_cols.append("job_title")  
+            if group_cols:  
+                report_df = df.groupby(group_cols).size().reset_index(name="Count")  
             else:  
-                print('No export selected.')  
+                report_df = df.copy()  
+            st.dataframe(report_df)  
       
-    generate_button.on_click(on_generate_clicked)  
+    elif report_type == "Training Completion":  
+        if "training" in st.session_state and not st.session_state.training.empty:  
+            training_df = st.session_state.training.copy()  
+            if "date" in training_df.columns:  
+                training_df['date'] = pd.to_datetime(training_df['date'], errors='coerce')  
+                training_df = training_df[(training_df['date'] >= date_from_dt) & (training_df['date'] <= date_to_dt)]  
+              
+            if not training_df.empty:  
+                # Optionally merge with employees to get names, departments etc.  
+                if "employees" in st.session_state:  
+                    training_with_emp = training_df.merge(  
+                        st.session_state.employees[['employee_id', 'first_name', 'last_name']],  
+                        on='employee_id',  
+                        how='left'  
+                    )  
+                    training_with_emp['employee'] = training_with_emp['first_name'] + ' ' + training_with_emp['last_name']  
+                else:  
+                    training_with_emp = training_df.copy()  
+                  
+                training_completion = pd.crosstab(training_with_emp['course_name'], training_with_emp['status'])  
+                st.dataframe(training_completion)  
+                  
+                # Plot Training Completion  
+                fig, ax = plt.subplots(figsize=(12, 8))  
+                training_completion.plot(kind='bar', stacked=True, ax=ax)  
+                ax.set_xlabel("Course", labelpad=10)  
+                ax.set_ylabel("Count", labelpad=10)  
+                ax.set_title("Training Status by Course", pad=15)  
+                ax.set_axisbelow(True)  
+                plt.xticks(rotation=45, ha="right")  
+                plt.tight_layout()  
+                st.pyplot(fig)  
+                  
+                report_df = training_completion  
+            else:  
+                st.info("No training found for the selected date range.")  
+        else:  
+            st.info("No training data available.")  
       
-    # Display the widget layout  
-    widget_box = widgets.VBox([  
-        date_from_picker,  
-        date_to_picker,  
-        grouping_options,  
-        export_dropdown,  
-        generate_button,  
-        output_area  
-    ])  
-    display(widget_box)  
-
+    elif report_type == "Meeting Frequency":  
+        if "meetings" in st.session_state and not st.session_state.meetings.empty:  
+            meetings_df = st.session_state.meetings.copy()  
+            meetings_df['meeting_date'] = pd.to_datetime(meetings_df['meeting_date'], errors='coerce')  
+            meetings_df = meetings_df[(meetings_df['meeting_date'] >= date_from_dt) & (meetings_df['meeting_date'] <= date_to_dt)]  
+              
+            if not meetings_df.empty:  
+                # Merge with employee data to get group fields if available  
+                if "employees" in st.session_state:  
+                    meetings_with_emp = meetings_df.merge(  
+                        st.session_state.employees[['employee_id', 'first_name', 'last_name', 'department', 'job_title']],  
+                        on='employee_id', how='left'  
+                    )  
+                    meetings_with_emp['employee'] = meetings_with_emp['first_name'] + ' ' + meetings_with_emp['last_name']  
+                else:  
+                    meetings_with_emp = meetings_df.copy()  
+                      
+                # Add a month column for aggregation  
+                meetings_with_emp['month']
