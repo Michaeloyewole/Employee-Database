@@ -512,19 +512,32 @@ elif module == "Training Records":
 # -------------------------------  
 # 11. Module: Reports  
 # -------------------------------  
+st.sidebar.subheader("Filter Period")  
+start_date = st.sidebar.date_input("Start Date", value=pd.to_datetime("2025-03-16"))  
+end_date = st.sidebar.date_input("End Date", value=pd.to_datetime("2025-03-15"))  
+  
+if start_date > end_date:  
+    st.sidebar.error("Error: Start date must be before or equal to End date.")  
+  
+# Report Type Selection  
 report_options = [  
     "Employees by Employment Status",  
     "Disciplinary Actions by Violations",  
     "Disciplinary Actions per Employee",  
     "Training per Employee",  
     "Training Completion",  
-    "Performance per Employee"  
+    "Performance per Employee",  
+    "Meeting Frequency"  # Example of a time-based report  
 ]  
   
 report_type = st.selectbox("Select Report Type", report_options)  
   
-if report_type == "Employees by Employment Status" and not st.session_state.employees.empty:  
+# Each report below uses the date filter if the underlying data is time-based.  
+# Ensure your data contains a date column if needed (e.g. meeting_date, completion_date)  
+  
+if report_type == "Employees by Employment Status":  
     st.subheader("Employees by Employment Status")  
+    # Assuming st.session_state.employees exists with column 'employment_status'  
     emp_status = st.session_state.employees['employment_status'].value_counts().reset_index()  
     emp_status.columns = ['Employment Status', 'Count']  
       
@@ -540,17 +553,18 @@ if report_type == "Employees by Employment Status" and not st.session_state.empl
     plt.tight_layout()  
     st.pyplot(fig)  
       
-    st.markdown(get_csv_download_link(emp_status, "employees_by_status.csv", "Download Employees by Status"), unsafe_allow_html=True)  
+    st.markdown(get_csv_download_link(emp_status, "employees_by_employment_status.csv", "Download Employees by Employment Status"), unsafe_allow_html=True)  
   
-elif report_type == "Disciplinary Actions by Violations" and not st.session_state.disciplinary.empty:  
+elif report_type == "Disciplinary Actions by Violations":  
     st.subheader("Disciplinary Actions by Violations")  
-    disp_by_violation = st.session_state.disciplinary['violation'].value_counts().reset_index()  
-    disp_by_violation.columns = ['Violation', 'Count']  
+    # Assuming st.session_state.disciplinary exists with column 'violation'  
+    disciplinary_violations = st.session_state.disciplinary['violation'].value_counts().reset_index()  
+    disciplinary_violations.columns = ['Violation', 'Count']  
       
-    st.dataframe(disp_by_violation)  
+    st.dataframe(disciplinary_violations)  
       
     fig, ax = plt.subplots(figsize=(12, 8))  
-    ax.bar(disp_by_violation['Violation'], disp_by_violation['Count'], color='#24EB84')  
+    ax.bar(disciplinary_violations['Violation'], disciplinary_violations['Count'], color='#24EB84')  
     ax.set_xlabel("Violation", labelpad=10)  
     ax.set_ylabel("Count", labelpad=10)  
     ax.set_title("Disciplinary Actions by Violations", pad=15)  
@@ -559,12 +573,13 @@ elif report_type == "Disciplinary Actions by Violations" and not st.session_stat
     plt.tight_layout()  
     st.pyplot(fig)  
       
-    st.markdown(get_csv_download_link(disp_by_violation, "disciplinary_by_violations.csv", "Download Disciplinary by Violations"), unsafe_allow_html=True)  
+    st.markdown(get_csv_download_link(disciplinary_violations, "disciplinary_by_violations.csv", "Download Disciplinary Actions by Violations"), unsafe_allow_html=True)  
   
-elif report_type == "Disciplinary Actions per Employee" and not st.session_state.disciplinary.empty:  
+elif report_type == "Disciplinary Actions per Employee":  
     st.subheader("Disciplinary Actions per Employee")  
+    # Assuming st.session_state.disciplinary exists with column 'employee_id'  
     disp_per_emp = st.session_state.disciplinary.groupby('employee_id').size().reset_index(name='Count')  
-    # Optional: Map to employee names if available  
+    # Helper method to get employee names  
     disp_per_emp['Employee Name'] = disp_per_emp['employee_id'].apply(lambda x: get_employee_display_name(x))  
       
     st.dataframe(disp_per_emp[['Employee Name', 'Count']])  
@@ -572,26 +587,35 @@ elif report_type == "Disciplinary Actions per Employee" and not st.session_state
     fig, ax = plt.subplots(figsize=(12, 8))  
     ax.bar(disp_per_emp['Employee Name'], disp_per_emp['Count'], color='#B2EB24')  
     ax.set_xlabel("Employee", labelpad=10)  
-    ax.set_ylabel("Disciplinary Actions", labelpad=10)  
+    ax.set_ylabel("Disciplinary Actions Count", labelpad=10)  
     ax.set_title("Disciplinary Actions per Employee", pad=15)  
     ax.set_axisbelow(True)  
     plt.xticks(rotation=45, ha='right')  
     plt.tight_layout()  
     st.pyplot(fig)  
       
-    st.markdown(get_csv_download_link(disp_per_emp, "disciplinary_per_employee.csv", "Download Disciplinary per Employee"), unsafe_allow_html=True)  
+    st.markdown(get_csv_download_link(disp_per_emp, "disciplinary_per_employee.csv", "Download Disciplinary Actions per Employee"), unsafe_allow_html=True)  
   
-elif report_type == "Training per Employee" and not st.session_state.training.empty:  
+elif report_type == "Training per Employee":  
     st.subheader("Training per Employee")  
-    training_per_emp = st.session_state.training.groupby('employee_id').size().reset_index(name='Training Count')  
+    # Assuming st.session_state.training exists with a 'completion_date' column (if applicable) and 'employee_id'  
+    training_df = st.session_state.training.copy()  
+      
+    # If your training data has a date column (e.g. 'completion_date'), then you can filter by date:  
+    if 'completion_date' in training_df.columns:  
+        training_df['completion_date'] = pd.to_datetime(training_df['completion_date'], errors='coerce')  
+        date_mask = (training_df['completion_date'] >= pd.to_datetime(start_date)) & (training_df['completion_date'] <= pd.to_datetime(end_date))  
+        training_df = training_df.loc[date_mask]  
+      
+    training_per_emp = training_df.groupby('employee_id').size().reset_index(name='Count')  
     training_per_emp['Employee Name'] = training_per_emp['employee_id'].apply(lambda x: get_employee_display_name(x))  
       
-    st.dataframe(training_per_emp[['Employee Name', 'Training Count']])  
+    st.dataframe(training_per_emp[['Employee Name', 'Count']])  
       
     fig, ax = plt.subplots(figsize=(12, 8))  
-    ax.bar(training_per_emp['Employee Name'], training_per_emp['Training Count'], color='#D324EB')  
+    ax.bar(training_per_emp['Employee Name'], training_per_emp['Count'], color='#D324EB')  
     ax.set_xlabel("Employee", labelpad=10)  
-    ax.set_ylabel("Training Count", labelpad=10)  
+    ax.set_ylabel("Training Sessions Count", labelpad=10)  
     ax.set_title("Training per Employee", pad=15)  
     ax.set_axisbelow(True)  
     plt.xticks(rotation=45, ha='right')  
@@ -600,8 +624,9 @@ elif report_type == "Training per Employee" and not st.session_state.training.em
       
     st.markdown(get_csv_download_link(training_per_emp, "training_per_employee.csv", "Download Training per Employee"), unsafe_allow_html=True)  
   
-elif report_type == "Training Completion" and not st.session_state.training.empty:  
+elif report_type == "Training Completion":  
     st.subheader("Training Completion")  
+    # Assuming st.session_state.training has 'course_name' and 'status' columns  
     training_status = pd.crosstab(st.session_state.training['course_name'], st.session_state.training['status'])  
       
     st.dataframe(training_status)  
@@ -611,15 +636,16 @@ elif report_type == "Training Completion" and not st.session_state.training.empt
     ax.set_xlabel('Course', labelpad=10)  
     ax.set_ylabel('Count', labelpad=10)  
     ax.set_title('Training Status by Course', pad=15)  
-    plt.xticks(rotation=45, ha='right')  
     ax.set_axisbelow(True)  
+    plt.xticks(rotation=45, ha='right')  
     plt.tight_layout()  
     st.pyplot(fig)  
       
     st.markdown(get_csv_download_link(training_status.reset_index(), "training_completion.csv", "Download Training Completion"), unsafe_allow_html=True)  
   
-elif report_type == "Performance per Employee" and not st.session_state.performance.empty:  
+elif report_type == "Performance per Employee":  
     st.subheader("Performance per Employee")  
+    # Assuming st.session_state.performance exists with columns 'employee_id' and 'performance_rating'  
     perf_per_emp = st.session_state.performance.groupby('employee_id')['performance_rating'].mean().reset_index()  
     perf_per_emp['Employee Name'] = perf_per_emp['employee_id'].apply(lambda x: get_employee_display_name(x))  
       
@@ -636,8 +662,37 @@ elif report_type == "Performance per Employee" and not st.session_state.performa
     st.pyplot(fig)  
       
     st.markdown(get_csv_download_link(perf_per_emp, "performance_per_employee.csv", "Download Performance per Employee"), unsafe_allow_html=True)  
+  
+elif report_type == "Meeting Frequency":  
+    st.subheader("Meeting Frequency")  
+    # Assuming st.session_state.meetings exists and has a 'meeting_date' column  
+    meetings_df = st.session_state.meetings.copy()  
+    if meetings_df['meeting_date'].dtype == 'object':  
+        meetings_df['meeting_date'] = pd.to_datetime(meetings_df['meeting_date'], errors='coerce')  
       
+    # Filter meetings by selected date range  
+    date_mask = (meetings_df['meeting_date'] >= pd.to_datetime(start_date)) & (meetings_df['meeting_date'] <= pd.to_datetime(end_date))  
+    meetings_df = meetings_df.loc[date_mask]  
+      
+    # Group by month (or appropriate period)  
+    meeting_freq = meetings_df.groupby(pd.Grouper(key='meeting_date', freq='M')).size().reset_index(name='Count')  
+    meeting_freq['Month'] = meeting_freq['meeting_date'].dt.strftime('%Y-%m')  
+      
+    st.dataframe(meeting_freq)  
+      
+    fig, ax = plt.subplots(figsize=(12, 8))  
+    ax.bar(meeting_freq['Month'], meeting_freq['Count'], color='coral')  
+    ax.set_xlabel("Month", labelpad=10)  
+    ax.set_ylabel("Number of Meetings", labelpad=10)  
+    ax.set_title("Meeting Frequency by Month", pad=15)  
+    ax.set_axisbelow(True)  
+    plt.xticks(rotation=45, ha='right')  
+    plt.tight_layout()  
+    st.pyplot(fig)  
+      
+    st.markdown(get_csv_download_link(meeting_freq, "meeting_frequency.csv", "Download Meeting Frequency"), unsafe_allow_html=True)  
+  
 else:  
-    st.info("No data available for the selected report or report type not implemented.")  
+    st.info("No data available for the selected report or the report type is not implemented.")  
       
-print('Modified report module with new report types.')   
+print('Reports module updated with date filtering and all report options.')  
