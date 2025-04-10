@@ -144,158 +144,7 @@ if module == "Employee Management":
     st.markdown(get_csv_download_link(st.session_state.employees, "employees.csv", "Download Employees CSV"), unsafe_allow_html=True)  
     if st.button("Save Employee Data"):  
         save_table("employees", st.session_state.employees)  
-  def employees_page():  
-    st.title("Employees")  
-      
-    # Initialize session state for employees if not exists  
-    if 'employees' not in st.session_state:  
-        st.session_state.employees = load_table('employees', employee_columns)  
-      
-    # Create tabs for Add/Edit and View  
-    tab1, tab2 = st.tabs(["Add/Edit Employee", "View Employees"])  
-      
-    with tab1:  
-        # File uploader for bulk import  
-        uploaded_employees = st.file_uploader("Upload Employee CSV", type=['csv'])  
-        if uploaded_employees is not None:  
-            st.session_state.employees = load_from_uploaded_file(uploaded_employees, employee_columns)  
-            st.success("Employee data uploaded successfully!")  
-          
-        # Employee ID lookup for editing  
-        st.subheader("Edit Existing Employee")  
-        edit_employee_id = st.text_input("Enter Employee ID to Edit", key="edit_employee_id")  
-          
-        # Initialize form values  
-        employee_data = {col: "" for col in employee_columns}  
-        is_edit_mode = False  
-          
-        # If employee ID is provided, look up the employee data  
-        if edit_employee_id:  
-            employee_df = st.session_state.employees  
-            matching_employee = employee_df[employee_df['employee_id'] == edit_employee_id]  
-              
-            if not matching_employee.empty:  
-                # Populate form with existing data  
-                for col in employee_columns:  
-                    employee_data[col] = matching_employee[col].values[0]  
-                is_edit_mode = True  
-                st.success(f"Found employee: {employee_data['first_name']} {employee_data['last_name']}")  
-            else:  
-                st.warning(f"No employee found with ID: {edit_employee_id}")  
-          
-        # Employee form  
-        st.subheader("Employee Information")  
-        with st.form("employee_form"):  
-            col1, col2 = st.columns(2)  
-              
-            with col1:  
-                # If in edit mode, display the ID as read-only  
-                if is_edit_mode:  
-                    st.text_input("Employee ID", value=employee_data['employee_id'], disabled=True)  
-                    employee_id = employee_data['employee_id']  # Keep the original ID  
-                else:  
-                    employee_id = st.text_input("Employee ID (max 6 digits)",   
-                                               value=employee_data['employee_id'],   
-                                               max_chars=6)  
-                  
-                first_name = st.text_input("First Name", value=employee_data['first_name'])  
-                last_name = st.text_input("Last Name", value=employee_data['last_name'])  
-                department = st.text_input("Department", value=employee_data['department'])  
-              
-            with col2:  
-                job_title = st.text_input("Job Title", value=employee_data['job_title'])  
-                email = st.text_input("Email", value=employee_data['email'])  
-                phone = st.text_input("Phone", value=employee_data['phone'])  
-                employment_status = st.selectbox(  
-                    "Employment Status",  
-                    options=["Full-time", "Part-time", "Contract", "Terminated"],  
-                    index=["Full-time", "Part-time", "Contract", "Terminated"].index(employee_data['employment_status'])   
-                    if employee_data['employment_status'] in ["Full-time", "Part-time", "Contract", "Terminated"] else 0  
-                )  
-              
-            submit_button = st.form_submit_button("Save Employee")  
-              
-            if submit_button:  
-                if not employee_id or not first_name or not last_name:  
-                    st.error("Employee ID, First Name, and Last Name are required!")  
-                else:  
-                    # Create new employee record  
-                    new_employee = {  
-                        'employee_id': employee_id,  
-                        'first_name': first_name,  
-                        'last_name': last_name,  
-                        'department': department,  
-                        'job_title': job_title,  
-                        'email': email,  
-                        'phone': phone,  
-                        'employment_status': employment_status  
-                    }  
-                      
-                    # If editing, update the existing record  
-                    if is_edit_mode:  
-                        # Remove the old record  
-                        st.session_state.employees = st.session_state.employees[  
-                            st.session_state.employees['employee_id'] != employee_id  
-                        ]  
-                        # Add the updated record  
-                        st.session_state.employees = pd.concat([  
-                            st.session_state.employees,   
-                            pd.DataFrame([new_employee])  
-                        ], ignore_index=True)  
-                        st.success(f"Employee {employee_id} updated successfully!")  
-                    else:  
-                        # Check if employee ID already exists  
-                        if employee_id in st.session_state.employees['employee_id'].values:  
-                            st.error(f"Employee ID {employee_id} already exists!")  
-                        else:  
-                            # Add new employee  
-                            st.session_state.employees = pd.concat([  
-                                st.session_state.employees,   
-                                pd.DataFrame([new_employee])  
-                            ], ignore_index=True)  
-                            st.success("New employee added successfully!")  
-                      
-                    # Save to CSV  
-                    save_table('employees', st.session_state.employees)  
-                      
-                    # Clear the form after successful submission  
-                    st.experimental_rerun()  
-      
-    with tab2:  
-        # View and filter employees  
-        st.subheader("Employee Records")  
-          
-        # Filter options  
-        col1, col2 = st.columns(2)  
-        with col1:  
-            filter_dept = st.multiselect(  
-                "Filter by Department",  
-                options=sorted(st.session_state.employees['department'].unique()),  
-                default=[]  
-            )  
-          
-        with col2:  
-            filter_status = st.multiselect(  
-                "Filter by Employment Status",  
-                options=sorted(st.session_state.employees['employment_status'].unique()),  
-                default=[]  
-            )  
-          
-        # Apply filters  
-        filtered_df = st.session_state.employees  
-        if filter_dept:  
-            filtered_df = filtered_df[filtered_df['department'].isin(filter_dept)]  
-        if filter_status:  
-            filtered_df = filtered_df[filtered_df['employment_status'].isin(filter_status)]  
-          
-        # Display filtered dataframe  
-        st.dataframe(filtered_df)  
-          
-        # Download option  
-        st.markdown(  
-            get_csv_download_link(filtered_df, "employees.csv", "Download Filtered Employee Data"),  
-            unsafe_allow_html=True  
-        )  
+  
 # -------------------------------  
 # 7. Module: One-on-One Meetings  
 # -------------------------------  
@@ -352,14 +201,14 @@ elif module == "One-on-One Meetings":
 elif module == "Disciplinary Actions":  
     st.header("Disciplinary Actions")  
     # Updated column structure for disciplinary actions:  
-    # ["Period (Date)", "disciplinary_id", "ID", "Job Title",  
+    # ["Period (Date)", "disciplinary_id", "ID", "First Name", "Last Name", "Job Title",  
     #  "Violation", "Interview Date", "Reason", "Comments", "Interviewer", "Decision"]  
       
     # CSV Upload option  
     uploaded_disciplinary = st.file_uploader("Upload Disciplinary CSV", type="csv", key="disciplinary_upload")  
     if uploaded_disciplinary is not None:  
         # When uploading, ensure the file has at least the required columns (if missing, fill with empty string)  
-        required_cols = ["Period (Date)", "disciplinary_id", "ID",  
+        required_cols = ["Period (Date)", "disciplinary_id", "ID", "First Name", "Last Name",  
                          "Job Title", "Violation", "Interview Date", "Reason", "Comments", "Interviewer", "Decision"]  
         st.session_state.disciplinary = load_from_uploaded_file(uploaded_disciplinary, required_cols)  
         st.success("Disciplinary data uploaded successfully!")  
@@ -372,8 +221,10 @@ elif module == "Disciplinary Actions":
         with col1:  
             period_date = st.date_input("Period (Date)", datetime.date.today())  
             disciplinary_id = st.text_input("Disciplinary ID (max 6 digits)", max_chars=6)  
-            emp_id = st.text_input("ID (Employee ID - max 6 digits)", max_chars=6)   
+            emp_id = st.text_input("ID (Employee ID - max 6 digits)", max_chars=6)  
+            first_name = st.text_input("First Name")  
         with col2:  
+            last_name = st.text_input("Last Name")  
             job_title = st.text_input("Job Title")  
             violation = st.text_input("Violation")  
             interview_date = st.date_input("Interview Date", datetime.date.today())  
@@ -395,6 +246,8 @@ elif module == "Disciplinary Actions":
                     "Period (Date)": [period_date.strftime('%Y-%m-%d')],  
                     "disciplinary_id": [disciplinary_id],  
                     "ID": [emp_id],  
+                    "First Name": [first_name],  
+                    "Last Name": [last_name],  
                     "Job Title": [job_title],  
                     "Violation": [violation],  
                     "Interview Date": [interview_date.strftime('%Y-%m-%d')],  
@@ -508,32 +361,19 @@ elif module == "Training Records":
 # -------------------------------  
 # 11. Module: Reports  
 # -------------------------------  
-st.sidebar.subheader("Filter Period")  
-start_date = st.sidebar.date_input("Start Date", value=pd.to_datetime("2025-03-16"))  
-end_date = st.sidebar.date_input("End Date", value=pd.to_datetime("2025-03-15"))  
-  
-if start_date > end_date:  
-    st.sidebar.error("Error: Start date must be before or equal to End date.")  
-  
-# Report Type Selection  
 report_options = [  
     "Employees by Employment Status",  
     "Disciplinary Actions by Violations",  
     "Disciplinary Actions per Employee",  
     "Training per Employee",  
     "Training Completion",  
-    "Performance per Employee",  
-    "Meeting Frequency"  # Example of a time-based report  
+    "Performance per Employee"  
 ]  
   
 report_type = st.selectbox("Select Report Type", report_options)  
   
-# Each report below uses the date filter if the underlying data is time-based.  
-# Ensure your data contains a date column if needed (e.g. meeting_date, completion_date)  
-  
-if report_type == "Employees by Employment Status":  
+if report_type == "Employees by Employment Status" and not st.session_state.employees.empty:  
     st.subheader("Employees by Employment Status")  
-    # Assuming st.session_state.employees exists with column 'employment_status'  
     emp_status = st.session_state.employees['employment_status'].value_counts().reset_index()  
     emp_status.columns = ['Employment Status', 'Count']  
       
@@ -549,18 +389,17 @@ if report_type == "Employees by Employment Status":
     plt.tight_layout()  
     st.pyplot(fig)  
       
-    st.markdown(get_csv_download_link(emp_status, "employees_by_employment_status.csv", "Download Employees by Employment Status"), unsafe_allow_html=True)  
+    st.markdown(get_csv_download_link(emp_status, "employees_by_status.csv", "Download Employees by Status"), unsafe_allow_html=True)  
   
-elif report_type == "Disciplinary Actions by Violations":  
+elif report_type == "Disciplinary Actions by Violations" and not st.session_state.disciplinary.empty:  
     st.subheader("Disciplinary Actions by Violations")  
-    # Assuming st.session_state.disciplinary exists with column 'violation'  
-    disciplinary_violations = st.session_state.disciplinary['violation'].value_counts().reset_index()  
-    disciplinary_violations.columns = ['Violation', 'Count']  
+    disp_by_violation = st.session_state.disciplinary['violation'].value_counts().reset_index()  
+    disp_by_violation.columns = ['Violation', 'Count']  
       
-    st.dataframe(disciplinary_violations)  
+    st.dataframe(disp_by_violation)  
       
     fig, ax = plt.subplots(figsize=(12, 8))  
-    ax.bar(disciplinary_violations['Violation'], disciplinary_violations['Count'], color='#24EB84')  
+    ax.bar(disp_by_violation['Violation'], disp_by_violation['Count'], color='#24EB84')  
     ax.set_xlabel("Violation", labelpad=10)  
     ax.set_ylabel("Count", labelpad=10)  
     ax.set_title("Disciplinary Actions by Violations", pad=15)  
@@ -569,13 +408,12 @@ elif report_type == "Disciplinary Actions by Violations":
     plt.tight_layout()  
     st.pyplot(fig)  
       
-    st.markdown(get_csv_download_link(disciplinary_violations, "disciplinary_by_violations.csv", "Download Disciplinary Actions by Violations"), unsafe_allow_html=True)  
+    st.markdown(get_csv_download_link(disp_by_violation, "disciplinary_by_violations.csv", "Download Disciplinary by Violations"), unsafe_allow_html=True)  
   
-elif report_type == "Disciplinary Actions per Employee":  
+elif report_type == "Disciplinary Actions per Employee" and not st.session_state.disciplinary.empty:  
     st.subheader("Disciplinary Actions per Employee")  
-    # Assuming st.session_state.disciplinary exists with column 'employee_id'  
     disp_per_emp = st.session_state.disciplinary.groupby('employee_id').size().reset_index(name='Count')  
-    # Helper method to get employee names  
+    # Optional: Map to employee names if available  
     disp_per_emp['Employee Name'] = disp_per_emp['employee_id'].apply(lambda x: get_employee_display_name(x))  
       
     st.dataframe(disp_per_emp[['Employee Name', 'Count']])  
@@ -583,35 +421,26 @@ elif report_type == "Disciplinary Actions per Employee":
     fig, ax = plt.subplots(figsize=(12, 8))  
     ax.bar(disp_per_emp['Employee Name'], disp_per_emp['Count'], color='#B2EB24')  
     ax.set_xlabel("Employee", labelpad=10)  
-    ax.set_ylabel("Disciplinary Actions Count", labelpad=10)  
+    ax.set_ylabel("Disciplinary Actions", labelpad=10)  
     ax.set_title("Disciplinary Actions per Employee", pad=15)  
     ax.set_axisbelow(True)  
     plt.xticks(rotation=45, ha='right')  
     plt.tight_layout()  
     st.pyplot(fig)  
       
-    st.markdown(get_csv_download_link(disp_per_emp, "disciplinary_per_employee.csv", "Download Disciplinary Actions per Employee"), unsafe_allow_html=True)  
+    st.markdown(get_csv_download_link(disp_per_emp, "disciplinary_per_employee.csv", "Download Disciplinary per Employee"), unsafe_allow_html=True)  
   
-elif report_type == "Training per Employee":  
+elif report_type == "Training per Employee" and not st.session_state.training.empty:  
     st.subheader("Training per Employee")  
-    # Assuming st.session_state.training exists with a 'completion_date' column (if applicable) and 'employee_id'  
-    training_df = st.session_state.training.copy()  
-      
-    # If your training data has a date column (e.g. 'completion_date'), then you can filter by date:  
-    if 'completion_date' in training_df.columns:  
-        training_df['completion_date'] = pd.to_datetime(training_df['completion_date'], errors='coerce')  
-        date_mask = (training_df['completion_date'] >= pd.to_datetime(start_date)) & (training_df['completion_date'] <= pd.to_datetime(end_date))  
-        training_df = training_df.loc[date_mask]  
-      
-    training_per_emp = training_df.groupby('employee_id').size().reset_index(name='Count')  
+    training_per_emp = st.session_state.training.groupby('employee_id').size().reset_index(name='Training Count')  
     training_per_emp['Employee Name'] = training_per_emp['employee_id'].apply(lambda x: get_employee_display_name(x))  
       
-    st.dataframe(training_per_emp[['Employee Name', 'Count']])  
+    st.dataframe(training_per_emp[['Employee Name', 'Training Count']])  
       
     fig, ax = plt.subplots(figsize=(12, 8))  
-    ax.bar(training_per_emp['Employee Name'], training_per_emp['Count'], color='#D324EB')  
+    ax.bar(training_per_emp['Employee Name'], training_per_emp['Training Count'], color='#D324EB')  
     ax.set_xlabel("Employee", labelpad=10)  
-    ax.set_ylabel("Training Sessions Count", labelpad=10)  
+    ax.set_ylabel("Training Count", labelpad=10)  
     ax.set_title("Training per Employee", pad=15)  
     ax.set_axisbelow(True)  
     plt.xticks(rotation=45, ha='right')  
@@ -620,9 +449,8 @@ elif report_type == "Training per Employee":
       
     st.markdown(get_csv_download_link(training_per_emp, "training_per_employee.csv", "Download Training per Employee"), unsafe_allow_html=True)  
   
-elif report_type == "Training Completion":  
+elif report_type == "Training Completion" and not st.session_state.training.empty:  
     st.subheader("Training Completion")  
-    # Assuming st.session_state.training has 'course_name' and 'status' columns  
     training_status = pd.crosstab(st.session_state.training['course_name'], st.session_state.training['status'])  
       
     st.dataframe(training_status)  
@@ -632,16 +460,15 @@ elif report_type == "Training Completion":
     ax.set_xlabel('Course', labelpad=10)  
     ax.set_ylabel('Count', labelpad=10)  
     ax.set_title('Training Status by Course', pad=15)  
-    ax.set_axisbelow(True)  
     plt.xticks(rotation=45, ha='right')  
+    ax.set_axisbelow(True)  
     plt.tight_layout()  
     st.pyplot(fig)  
       
     st.markdown(get_csv_download_link(training_status.reset_index(), "training_completion.csv", "Download Training Completion"), unsafe_allow_html=True)  
   
-elif report_type == "Performance per Employee":  
+elif report_type == "Performance per Employee" and not st.session_state.performance.empty:  
     st.subheader("Performance per Employee")  
-    # Assuming st.session_state.performance exists with columns 'employee_id' and 'performance_rating'  
     perf_per_emp = st.session_state.performance.groupby('employee_id')['performance_rating'].mean().reset_index()  
     perf_per_emp['Employee Name'] = perf_per_emp['employee_id'].apply(lambda x: get_employee_display_name(x))  
       
@@ -658,37 +485,8 @@ elif report_type == "Performance per Employee":
     st.pyplot(fig)  
       
     st.markdown(get_csv_download_link(perf_per_emp, "performance_per_employee.csv", "Download Performance per Employee"), unsafe_allow_html=True)  
-  
-elif report_type == "Meeting Frequency":  
-    st.subheader("Meeting Frequency")  
-    # Assuming st.session_state.meetings exists and has a 'meeting_date' column  
-    meetings_df = st.session_state.meetings.copy()  
-    if meetings_df['meeting_date'].dtype == 'object':  
-        meetings_df['meeting_date'] = pd.to_datetime(meetings_df['meeting_date'], errors='coerce')  
       
-    # Filter meetings by selected date range  
-    date_mask = (meetings_df['meeting_date'] >= pd.to_datetime(start_date)) & (meetings_df['meeting_date'] <= pd.to_datetime(end_date))  
-    meetings_df = meetings_df.loc[date_mask]  
-      
-    # Group by month (or appropriate period)  
-    meeting_freq = meetings_df.groupby(pd.Grouper(key='meeting_date', freq='M')).size().reset_index(name='Count')  
-    meeting_freq['Month'] = meeting_freq['meeting_date'].dt.strftime('%Y-%m')  
-      
-    st.dataframe(meeting_freq)  
-      
-    fig, ax = plt.subplots(figsize=(12, 8))  
-    ax.bar(meeting_freq['Month'], meeting_freq['Count'], color='coral')  
-    ax.set_xlabel("Month", labelpad=10)  
-    ax.set_ylabel("Number of Meetings", labelpad=10)  
-    ax.set_title("Meeting Frequency by Month", pad=15)  
-    ax.set_axisbelow(True)  
-    plt.xticks(rotation=45, ha='right')  
-    plt.tight_layout()  
-    st.pyplot(fig)  
-      
-    st.markdown(get_csv_download_link(meeting_freq, "meeting_frequency.csv", "Download Meeting Frequency"), unsafe_allow_html=True)  
-  
 else:  
-    st.info("No data available for the selected report or the report type is not implemented.")  
+    st.info("No data available for the selected report or report type not implemented.")  
       
-print('Reports module updated with date filtering and all report options.')  
+print('Modified report module with new report types.')   
