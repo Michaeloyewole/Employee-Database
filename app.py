@@ -402,21 +402,109 @@ elif module == "Reports":
         date_from_dt = pd.to_datetime(date_from)  
         date_to_dt = pd.to_datetime(date_to)  
   
-        # ---------------------------  
-        # Existing report types  
-        # ---------------------------  
+        # Original report types  
         if report_type == "Employee Activity":  
-            # (Insert existing code for Employee Activity Report here)  
-            st.info("Employee Activity Report generation code goes here.")  
-          
+            if "activity" in st.session_state and not st.session_state.activity.empty:  
+                activity_df = st.session_state.activity.copy()  
+                activity_df['date'] = pd.to_datetime(activity_df['date'], errors='coerce')  
+                activity_df = activity_df[(activity_df['date'] >= date_from_dt) & (activity_df['date'] <= date_to_dt)]  
+      
+                if not activity_df.empty:  
+                    activity_with_emp = activity_df.merge(  
+                        st.session_state.employees[['employee_id', 'first_name', 'last_name', 'department', 'job_title']],  
+                        on='employee_id', how='left'  
+                    )  
+                    activity_with_emp['employee'] = activity_with_emp['first_name'] + " " + activity_with_emp['last_name']  
+                    report_df = activity_with_emp  
+                    st.dataframe(report_df)  
+                      
+                    # Simple bar chart: count of activities per employee  
+                    counts = report_df['employee'].value_counts().reset_index()  
+                    counts.columns = ['employee', 'Count']  
+                    fig, ax = plt.subplots(figsize=(12, 8))  
+                    ax.bar(counts['employee'], counts['Count'], color='#2563EB')  
+                    ax.set_xlabel("Employee", labelpad=10)  
+                    ax.set_ylabel("Activity Count", labelpad=10)  
+                    ax.set_title("Employee Activity Report", pad=15)  
+                    ax.set_axisbelow(True)  
+                    plt.xticks(rotation=45, ha='right')  
+                    plt.tight_layout()  
+                    st.pyplot(fig)  
+                else:  
+                    st.info("No employee activity data available for the selected date range.")  
+            else:  
+                st.info("No employee activity data available.")  
+      
         elif report_type == "Department Performance":  
-            # (Insert existing code for Department Performance Report here)  
-            st.info("Department Performance Report generation code goes here.")  
-          
+            if "performance" in st.session_state and not st.session_state.performance.empty:  
+                perf_df = st.session_state.performance.copy()  
+                perf_df['date'] = pd.to_datetime(perf_df['date'], errors='coerce')  
+                perf_df = perf_df[(perf_df['date'] >= date_from_dt) & (perf_df['date'] <= date_to_dt)]  
+                  
+                if not perf_df.empty:  
+                    perf_with_emp = perf_df.merge(  
+                        st.session_state.employees[['employee_id', 'first_name', 'last_name', 'department']],  
+                        on='employee_id', how='left'  
+                    )  
+                      
+                    # Assuming there's a numeric performance metric column  
+                    numeric_cols = perf_with_emp.select_dtypes(include=['number']).columns.tolist()  
+                    if 'employee_id' in numeric_cols:  
+                        numeric_cols.remove('employee_id')  
+                      
+                    if numeric_cols:  
+                        dept_perf = perf_with_emp.groupby('department')[numeric_cols].mean().reset_index()  
+                        report_df = dept_perf  
+                        st.dataframe(report_df)  
+                          
+                        # Plot  
+                        fig, ax = plt.subplots(figsize=(12, 8))  
+                        ax.bar(dept_perf['department'], dept_perf[numeric_cols[0]], color='#2563EB')  
+                        ax.set_xlabel("Department", labelpad=10)  
+                        ax.set_ylabel(numeric_cols[0], labelpad=10)  
+                        ax.set_title("Department Performance", pad=15)  
+                        ax.set_axisbelow(True)  
+                        plt.xticks(rotation=45, ha='right')  
+                        plt.tight_layout()  
+                        st.pyplot(fig)  
+                    else:  
+                        st.info("No numeric performance metrics found in the data.")  
+                else:  
+                    st.info("No performance data found for the selected date range.")  
+            else:  
+                st.info("No performance data available.")  
+      
         elif report_type == "Training Completion":  
-            # (Insert existing code for Training Completion Report here)  
-            st.info("Training Completion Report generation code goes here.")  
-          
+            if "training" in st.session_state and not st.session_state.training.empty:  
+                training_df = st.session_state.training.copy()  
+                training_df['date'] = pd.to_datetime(training_df['date'], errors='coerce')  
+                training_df = training_df[(training_df['date'] >= date_from_dt) & (training_df['date'] <= date_to_dt)]  
+                  
+                if not training_df.empty:  
+                    # Assuming there's a completion status column  
+                    if 'completion_status' in training_df.columns:  
+                        completion_counts = training_df['completion_status'].value_counts().reset_index()  
+                        completion_counts.columns = ['Status', 'Count']  
+                        report_df = completion_counts  
+                        st.dataframe(report_df)  
+                          
+                        # Plot  
+                        fig, ax = plt.subplots(figsize=(12, 8))  
+                        ax.bar(completion_counts['Status'], completion_counts['Count'], color='#2563EB')  
+                        ax.set_xlabel("Completion Status", labelpad=10)  
+                        ax.set_ylabel("Count", labelpad=10)  
+                        ax.set_title("Training Completion Status", pad=15)  
+                        ax.set_axisbelow(True)  
+                        plt.xticks(rotation=45, ha='right')  
+                        plt.tight_layout()  
+                        st.pyplot(fig)  
+                    else:  
+                        st.info("Completion status column not found in training data.")  
+                else:  
+                    st.info("No training data found for the selected date range.")  
+            else:  
+                st.info("No training data available.")  
+      
         elif report_type == "Meeting Frequency":  
             if "meetings" in st.session_state and not st.session_state.meetings.empty:  
                 meetings_df = st.session_state.meetings.copy()  
@@ -424,13 +512,16 @@ elif module == "Reports":
                 meetings_df = meetings_df[(meetings_df['meeting_date'] >= date_from_dt) & (meetings_df['meeting_date'] <= date_to_dt)]  
                   
                 if not meetings_df.empty:  
+                    # Add month column for grouping  
                     meetings_df['month'] = meetings_df['meeting_date'].dt.strftime('%Y-%m')  
+                      
                     meeting_freq = meetings_df.groupby('month').size().reset_index(name='Count')  
                     report_df = meeting_freq  
                     st.dataframe(report_df)  
                       
+                    # Plot  
                     fig, ax = plt.subplots(figsize=(12, 8))  
-                    ax.bar(report_df['month'], report_df['Count'], color='#2563EB')  
+                    ax.bar(meeting_freq['month'], meeting_freq['Count'], color='#2563EB')  
                     ax.set_xlabel("Month", labelpad=10)  
                     ax.set_ylabel("Number of Meetings", labelpad=10)  
                     ax.set_title("Meeting Frequency by Month", pad=15)  
@@ -442,18 +533,19 @@ elif module == "Reports":
                     st.info("No meetings found for the selected date range.")  
             else:  
                 st.info("No meeting data available.")  
-  
-        # ---------------------------  
-        # New report types added below  
-        # ---------------------------  
+                  
+        # New report types  
         elif report_type == "Employees by Employment Status":  
             if "employees" in st.session_state and not st.session_state.employees.empty:  
                 emp_df = st.session_state.employees.copy()  
+                # We assume employment status is stored in a column named 'employment_status'  
                 if "employment_status" in emp_df.columns:  
                     status_counts = emp_df['employment_status'].value_counts().reset_index()  
                     status_counts.columns = ['Employment Status', 'Count']  
                     report_df = status_counts  
                     st.dataframe(report_df)  
+                      
+                    # Plot  
                     fig, ax = plt.subplots(figsize=(12, 8))  
                     ax.bar(report_df['Employment Status'], report_df['Count'], color='#2563EB')  
                     ax.set_xlabel("Employment Status", labelpad=10)  
@@ -467,22 +559,26 @@ elif module == "Reports":
                     st.info("Employment status column not found in employee data.")  
             else:  
                 st.info("No employee data available.")  
-          
+                  
         elif report_type == "Disciplinary Actions by Violations":  
             if "disciplinary" in st.session_state and not st.session_state.disciplinary.empty:  
                 disc_df = st.session_state.disciplinary.copy()  
                 disc_df['date'] = pd.to_datetime(disc_df['date'], errors='coerce')  
                 disc_df = disc_df[(disc_df['date'] >= date_from_dt) & (disc_df['date'] <= date_to_dt)]  
+                  
                 if not disc_df.empty:  
+                    # Count violations by type  
                     violation_counts = disc_df['violation_type'].value_counts().reset_index()  
                     violation_counts.columns = ['Violation Type', 'Count']  
                     report_df = violation_counts  
                     st.dataframe(report_df)  
+                      
+                    # Plot  
                     fig, ax = plt.subplots(figsize=(12, 8))  
                     ax.bar(report_df['Violation Type'], report_df['Count'], color='#2563EB')  
                     ax.set_xlabel("Violation Type", labelpad=10)  
                     ax.set_ylabel("Number of Incidents", labelpad=10)  
-                    ax.set_title("Disciplinary Actions by Violations", pad=15)  
+                    ax.set_title("Disciplinary Actions by Violation Type", pad=15)  
                     ax.set_axisbelow(True)  
                     plt.xticks(rotation=45, ha='right')  
                     plt.tight_layout()  
@@ -491,23 +587,28 @@ elif module == "Reports":
                     st.info("No disciplinary actions found for the selected date range.")  
             else:  
                 st.info("No disciplinary data available.")  
-          
+                  
         elif report_type == "Disciplinary Actions per Employee":  
             if "disciplinary" in st.session_state and not st.session_state.disciplinary.empty:  
                 disc_df = st.session_state.disciplinary.copy()  
                 disc_df['date'] = pd.to_datetime(disc_df['date'], errors='coerce')  
                 disc_df = disc_df[(disc_df['date'] >= date_from_dt) & (disc_df['date'] <= date_to_dt)]  
+                  
                 if not disc_df.empty:  
-                    # Merge disciplinary with employee data  
-                    disc_emp = disc_df.merge(  
+                    # Merge with employee data  
+                    disc_with_emp = disc_df.merge(  
                         st.session_state.employees[['employee_id', 'first_name', 'last_name']],  
                         on='employee_id', how='left'  
                     )  
-                    disc_emp['employee'] = disc_emp['first_name'] + " " + disc_emp['last_name']  
-                    disp_counts = disc_emp['employee'].value_counts().reset_index()  
-                    disp_counts.columns = ['Employee', 'Count']  
-                    report_df = disp_counts  
+                    disc_with_emp['employee'] = disc_with_emp['first_name'] + " " + disc_with_emp['last_name']  
+                      
+                    # Count actions per employee  
+                    emp_counts = disc_with_emp['employee'].value_counts().reset_index()  
+                    emp_counts.columns = ['Employee', 'Count']  
+                    report_df = emp_counts  
                     st.dataframe(report_df)  
+                      
+                    # Plot  
                     fig, ax = plt.subplots(figsize=(12, 8))  
                     ax.bar(report_df['Employee'], report_df['Count'], color='#2563EB')  
                     ax.set_xlabel("Employee", labelpad=10)  
@@ -521,27 +622,32 @@ elif module == "Reports":
                     st.info("No disciplinary actions found for the selected date range.")  
             else:  
                 st.info("No disciplinary data available.")  
-          
+                  
         elif report_type == "Training per Employee":  
             if "training" in st.session_state and not st.session_state.training.empty:  
                 train_df = st.session_state.training.copy()  
                 train_df['date'] = pd.to_datetime(train_df['date'], errors='coerce')  
                 train_df = train_df[(train_df['date'] >= date_from_dt) & (train_df['date'] <= date_to_dt)]  
+                  
                 if not train_df.empty:  
-                    # Merge training with employee data  
-                    train_emp = train_df.merge(  
+                    # Merge with employee data  
+                    train_with_emp = train_df.merge(  
                         st.session_state.employees[['employee_id', 'first_name', 'last_name']],  
                         on='employee_id', how='left'  
                     )  
-                    train_emp['employee'] = train_emp['first_name'] + " " + train_emp['last_name']  
-                    train_counts = train_emp['employee'].value_counts().reset_index()  
-                    train_counts.columns = ['Employee', 'Trainings Completed']  
-                    report_df = train_counts  
+                    train_with_emp['employee'] = train_with_emp['first_name'] + " " + train_with_emp['last_name']  
+                      
+                    # Count trainings per employee  
+                    emp_counts = train_with_emp['employee'].value_counts().reset_index()  
+                    emp_counts.columns = ['Employee', 'Count']  
+                    report_df = emp_counts  
                     st.dataframe(report_df)  
+                      
+                    # Plot  
                     fig, ax = plt.subplots(figsize=(12, 8))  
-                    ax.bar(report_df['Employee'], report_df['Trainings Completed'], color='#2563EB')  
+                    ax.bar(report_df['Employee'], report_df['Count'], color='#2563EB')  
                     ax.set_xlabel("Employee", labelpad=10)  
-                    ax.set_ylabel("Trainings Completed", labelpad=10)  
+                    ax.set_ylabel("Number of Trainings", labelpad=10)  
                     ax.set_title("Training per Employee", pad=15)  
                     ax.set_axisbelow(True)  
                     plt.xticks(rotation=45, ha='right')  
@@ -551,12 +657,13 @@ elif module == "Reports":
                     st.info("No training data found for the selected date range.")  
             else:  
                 st.info("No training data available.")  
-          
+                  
         elif report_type == "Training Completion Status":  
             if "training" in st.session_state and not st.session_state.training.empty:  
                 train_df = st.session_state.training.copy()  
                 train_df['date'] = pd.to_datetime(train_df['date'], errors='coerce')  
                 train_df = train_df[(train_df['date'] >= date_from_dt) & (train_df['date'] <= date_to_dt)]  
+                  
                 if not train_df.empty:  
                     # Expecting a column 'completion_status' in training data indicating completion status  
                     if "completion_status" in train_df.columns:  
@@ -564,6 +671,8 @@ elif module == "Reports":
                         status_counts.columns = ['Completion Status', 'Count']  
                         report_df = status_counts  
                         st.dataframe(report_df)  
+                          
+                        # Plot  
                         fig, ax = plt.subplots(figsize=(12, 8))  
                         ax.bar(report_df['Completion Status'], report_df['Count'], color='#2563EB')  
                         ax.set_xlabel("Completion Status", labelpad=10)  
@@ -579,9 +688,55 @@ elif module == "Reports":
                     st.info("No training data found for the selected date range.")  
             else:  
                 st.info("No training data available.")  
-          
+                  
         elif report_type == "Performance per Employee":  
             if "performance" in st.session_state and not st.session_state.performance.empty:  
                 perf_df = st.session_state.performance.copy()  
                 perf_df['date'] = pd.to_datetime(perf_df['date'], errors='coerce')  
-                perf_df = perf_df[(perf_df['date'] >= date_from_dt
+                perf_df = perf_df[(perf_df['date'] >= date_from_dt) & (perf_df['date'] <= date_to_dt)]  
+                  
+                if not perf_df.empty:  
+                    # Merge with employee data  
+                    perf_with_emp = perf_df.merge(  
+                        st.session_state.employees[['employee_id', 'first_name', 'last_name']],  
+                        on='employee_id', how='left'  
+                    )  
+                    perf_with_emp['employee'] = perf_with_emp['first_name'] + " " + perf_with_emp['last_name']  
+                      
+                    # Find numeric performance metrics  
+                    numeric_cols = perf_with_emp.select_dtypes(include=['number']).columns.tolist()  
+                    if 'employee_id' in numeric_cols:  
+                        numeric_cols.remove('employee_id')  
+                      
+                    if numeric_cols:  
+                        # Calculate average performance metrics per employee  
+                        report_df = perf_with_emp.groupby('employee')[numeric_cols].mean().reset_index()  
+                        st.dataframe(report_df)  
+                          
+                        # Plot  
+                        fig, ax = plt.subplots(figsize=(12, 8))  
+                        ax.bar(report_df['employee'], report_df[numeric_cols[0]], color='#2563EB')  
+                        ax.set_xlabel("Employee", labelpad=10)  
+                        ax.set_ylabel(numeric_cols[0], labelpad=10)  
+                        ax.set_title("Performance per Employee", pad=15)  
+                        ax.set_axisbelow(True)  
+                        plt.xticks(rotation=45, ha='right')  
+                        plt.tight_layout()  
+                        st.pyplot(fig)  
+                    else:  
+                        st.info("No numeric performance metrics found in the data.")  
+                else:  
+                    st.info("No performance data found for the selected date range.")  
+            else:  
+                st.info("No performance data available.")  
+  
+    # Export options  
+    st.subheader("Export Report")  
+    if st.button("Export to CSV"):  
+        if 'report_df' in locals() and report_df is not None:  
+            csv = report_df.to_csv(index=False)  
+            b64 = base64.b64encode(csv.encode()).decode()  
+            href = f'<a href="data:file/csv;base64,{b64}" download="report.csv">Download CSV File</a>'  
+            st.markdown(href, unsafe_allow_html=True)  
+        else:  
+            st.error("No report data to export.")  
