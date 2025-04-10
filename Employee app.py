@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd  
 import matplotlib.pyplot as plt  
 import datetime  
-import base64  
+import base64   
   
 # -------------------------------  
 # 1. Page Config & Data Directory  
@@ -361,95 +361,132 @@ elif module == "Training Records":
 # -------------------------------  
 # 11. Module: Reports  
 # -------------------------------  
-elif module == "Reports":  
-    st.header("Reports")  
+report_options = [  
+    "Employees by Employment Status",  
+    "Disciplinary Actions by Violations",  
+    "Disciplinary Actions per Employee",  
+    "Training per Employee",  
+    "Training Completion",  
+    "Performance per Employee"  
+]  
+  
+report_type = st.selectbox("Select Report Type", report_options)  
+  
+if report_type == "Employees by Employment Status" and not st.session_state.employees.empty:  
+    st.subheader("Employees by Employment Status")  
+    emp_status = st.session_state.employees['employment_status'].value_counts().reset_index()  
+    emp_status.columns = ['Employment Status', 'Count']  
       
-    report_type = st.selectbox(  
-        "Select Report Type",  
-        ["Employees by Department", "Performance Overview", "Training Completion", "Meeting Frequency"]  
-    )  
+    st.dataframe(emp_status)  
       
-    if report_type == "Employees by Department" and not st.session_state.employees.empty:  
-        st.subheader("Employees by Department")  
-        dept_summary = st.session_state.employees['department'].value_counts().reset_index()  
-        dept_summary.columns = ['Department', 'Count']  
-          
-        st.dataframe(dept_summary)  
-          
-        # Plot  
-        fig, ax = plt.subplots(figsize=(10, 6))  
-        ax.bar(dept_summary['Department'], dept_summary['Count'], color='skyblue')  
-        ax.set_xlabel('Department')  
-        ax.set_ylabel('Number of Employees')  
-        ax.set_title('Employees by Department')  
-        plt.xticks(rotation=45, ha='right')  
-        st.pyplot(fig)  
-          
-        # Export option  
-        st.markdown(get_csv_download_link(dept_summary, "department_summary.csv", "Download Department Summary"), unsafe_allow_html=True)  
-          
-    elif report_type == "Performance Overview" and not st.session_state.performance.empty:  
-        st.subheader("Performance Overview")  
-        perf_overview = st.session_state.performance.groupby('employee_id')['score'].mean().reset_index()  
-        perf_overview['employee_name'] = perf_overview['employee_id'].apply(get_employee_display_name)  
-          
-        st.dataframe(perf_overview)  
-          
-        # Plot  
-        fig, ax = plt.subplots(figsize=(10, 6))  
-        ax.bar(perf_overview['employee_name'], perf_overview['score'], color='lightgreen')  
-        ax.set_xlabel('Employee')  
-        ax.set_ylabel('Average Performance Score')  
-        ax.set_title('Average Performance by Employee')  
-        plt.xticks(rotation=45, ha='right')  
-        plt.ylim(0, 5)  
-        st.pyplot(fig)  
-          
-        # Export option  
-        st.markdown(get_csv_download_link(perf_overview, "performance_overview.csv", "Download Performance Overview"), unsafe_allow_html=True)  
-          
-    elif report_type == "Training Completion" and not st.session_state.training.empty:  
-        st.subheader("Training Completion")  
-        training_status = pd.crosstab(st.session_state.training['course_name'], st.session_state.training['status'])  
-          
-        st.dataframe(training_status)  
-          
-        # Plot  
-        fig, ax = plt.subplots(figsize=(10, 6))  
-        training_status.plot(kind='bar', stacked=True, ax=ax)  
-        ax.set_xlabel('Course')  
-        ax.set_ylabel('Count')  
-        ax.set_title('Training Status by Course')  
-        plt.xticks(rotation=45, ha='right')  
-        plt.legend(title='Status')  
-        st.pyplot(fig)  
-          
-        # Export option  
-        st.markdown(get_csv_download_link(training_status.reset_index(), "training_completion.csv", "Download Training Completion"), unsafe_allow_html=True)  
-          
-    elif report_type == "Meeting Frequency" and not st.session_state.meetings.empty:  
-        st.subheader("Meeting Frequency")  
-          
-        # Convert meeting_date to datetime if it's not already  
-        if st.session_state.meetings['meeting_date'].dtype == 'object':  
-            st.session_state.meetings['meeting_date'] = pd.to_datetime(st.session_state.meetings['meeting_date'])  
-          
-        # Group by month and count  
-        meeting_freq = st.session_state.meetings.groupby(pd.Grouper(key='meeting_date', freq='M')).size().reset_index()  
-        meeting_freq.columns = ['Month', 'Count']  
-        meeting_freq['Month'] = meeting_freq['Month'].dt.strftime('%Y-%m')  
-          
-        st.dataframe(meeting_freq)  
-          
-        # Plot  
-        fig, ax = plt.subplots(figsize=(10, 6))  
-        ax.bar(meeting_freq['Month'], meeting_freq['Count'], color='coral')  
-        ax.set_xlabel('Month')  
-        ax.set_ylabel('Number of Meetings')  
-        ax.set_title('Meeting Frequency by Month')  
-        plt.xticks(rotation=45, ha='right')  
-        st.pyplot(fig)  
-          
-        # Export option  
-        st.markdown(get_csv_download_link(meeting_freq, "meeting_frequency.csv", "Download Meeting Frequency"), unsafe_allow_html=True)  
-
+    fig, ax = plt.subplots(figsize=(12, 8))  
+    ax.bar(emp_status['Employment Status'], emp_status['Count'], color='#2563EB')  
+    ax.set_xlabel("Employment Status", labelpad=10)  
+    ax.set_ylabel("Count", labelpad=10)  
+    ax.set_title("Employees by Employment Status", pad=15)  
+    ax.set_axisbelow(True)  
+    plt.xticks(rotation=45, ha='right')  
+    plt.tight_layout()  
+    st.pyplot(fig)  
+      
+    st.markdown(get_csv_download_link(emp_status, "employees_by_status.csv", "Download Employees by Status"), unsafe_allow_html=True)  
+  
+elif report_type == "Disciplinary Actions by Violations" and not st.session_state.disciplinary.empty:  
+    st.subheader("Disciplinary Actions by Violations")  
+    disp_by_violation = st.session_state.disciplinary['violation'].value_counts().reset_index()  
+    disp_by_violation.columns = ['Violation', 'Count']  
+      
+    st.dataframe(disp_by_violation)  
+      
+    fig, ax = plt.subplots(figsize=(12, 8))  
+    ax.bar(disp_by_violation['Violation'], disp_by_violation['Count'], color='#24EB84')  
+    ax.set_xlabel("Violation", labelpad=10)  
+    ax.set_ylabel("Count", labelpad=10)  
+    ax.set_title("Disciplinary Actions by Violations", pad=15)  
+    ax.set_axisbelow(True)  
+    plt.xticks(rotation=45, ha='right')  
+    plt.tight_layout()  
+    st.pyplot(fig)  
+      
+    st.markdown(get_csv_download_link(disp_by_violation, "disciplinary_by_violations.csv", "Download Disciplinary by Violations"), unsafe_allow_html=True)  
+  
+elif report_type == "Disciplinary Actions per Employee" and not st.session_state.disciplinary.empty:  
+    st.subheader("Disciplinary Actions per Employee")  
+    disp_per_emp = st.session_state.disciplinary.groupby('employee_id').size().reset_index(name='Count')  
+    # Optional: Map to employee names if available  
+    disp_per_emp['Employee Name'] = disp_per_emp['employee_id'].apply(lambda x: get_employee_display_name(x))  
+      
+    st.dataframe(disp_per_emp[['Employee Name', 'Count']])  
+      
+    fig, ax = plt.subplots(figsize=(12, 8))  
+    ax.bar(disp_per_emp['Employee Name'], disp_per_emp['Count'], color='#B2EB24')  
+    ax.set_xlabel("Employee", labelpad=10)  
+    ax.set_ylabel("Disciplinary Actions", labelpad=10)  
+    ax.set_title("Disciplinary Actions per Employee", pad=15)  
+    ax.set_axisbelow(True)  
+    plt.xticks(rotation=45, ha='right')  
+    plt.tight_layout()  
+    st.pyplot(fig)  
+      
+    st.markdown(get_csv_download_link(disp_per_emp, "disciplinary_per_employee.csv", "Download Disciplinary per Employee"), unsafe_allow_html=True)  
+  
+elif report_type == "Training per Employee" and not st.session_state.training.empty:  
+    st.subheader("Training per Employee")  
+    training_per_emp = st.session_state.training.groupby('employee_id').size().reset_index(name='Training Count')  
+    training_per_emp['Employee Name'] = training_per_emp['employee_id'].apply(lambda x: get_employee_display_name(x))  
+      
+    st.dataframe(training_per_emp[['Employee Name', 'Training Count']])  
+      
+    fig, ax = plt.subplots(figsize=(12, 8))  
+    ax.bar(training_per_emp['Employee Name'], training_per_emp['Training Count'], color='#D324EB')  
+    ax.set_xlabel("Employee", labelpad=10)  
+    ax.set_ylabel("Training Count", labelpad=10)  
+    ax.set_title("Training per Employee", pad=15)  
+    ax.set_axisbelow(True)  
+    plt.xticks(rotation=45, ha='right')  
+    plt.tight_layout()  
+    st.pyplot(fig)  
+      
+    st.markdown(get_csv_download_link(training_per_emp, "training_per_employee.csv", "Download Training per Employee"), unsafe_allow_html=True)  
+  
+elif report_type == "Training Completion" and not st.session_state.training.empty:  
+    st.subheader("Training Completion")  
+    training_status = pd.crosstab(st.session_state.training['course_name'], st.session_state.training['status'])  
+      
+    st.dataframe(training_status)  
+      
+    fig, ax = plt.subplots(figsize=(12, 8))  
+    training_status.plot(kind='bar', stacked=True, ax=ax)  
+    ax.set_xlabel('Course', labelpad=10)  
+    ax.set_ylabel('Count', labelpad=10)  
+    ax.set_title('Training Status by Course', pad=15)  
+    plt.xticks(rotation=45, ha='right')  
+    ax.set_axisbelow(True)  
+    plt.tight_layout()  
+    st.pyplot(fig)  
+      
+    st.markdown(get_csv_download_link(training_status.reset_index(), "training_completion.csv", "Download Training Completion"), unsafe_allow_html=True)  
+  
+elif report_type == "Performance per Employee" and not st.session_state.performance.empty:  
+    st.subheader("Performance per Employee")  
+    perf_per_emp = st.session_state.performance.groupby('employee_id')['performance_rating'].mean().reset_index()  
+    perf_per_emp['Employee Name'] = perf_per_emp['employee_id'].apply(lambda x: get_employee_display_name(x))  
+      
+    st.dataframe(perf_per_emp[['Employee Name', 'performance_rating']])  
+      
+    fig, ax = plt.subplots(figsize=(12, 8))  
+    ax.bar(perf_per_emp['Employee Name'], perf_per_emp['performance_rating'], color='#EB3424')  
+    ax.set_xlabel("Employee", labelpad=10)  
+    ax.set_ylabel("Average Performance Rating", labelpad=10)  
+    ax.set_title("Performance per Employee", pad=15)  
+    ax.set_axisbelow(True)  
+    plt.xticks(rotation=45, ha='right')  
+    plt.tight_layout()  
+    st.pyplot(fig)  
+      
+    st.markdown(get_csv_download_link(perf_per_emp, "performance_per_employee.csv", "Download Performance per Employee"), unsafe_allow_html=True)  
+      
+else:  
+    st.info("No data available for the selected report or report type not implemented.")  
+      
+print('Modified report module with new report types.')   
