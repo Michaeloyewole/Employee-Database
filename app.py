@@ -219,4 +219,4 @@ elif st.session_state.current_module == "Training Completion":
         st.success("Training data loaded from file.")  
       
     st.subheader("Training Records")  
-    st.dataframe(st
+    st.dataframe(st)
