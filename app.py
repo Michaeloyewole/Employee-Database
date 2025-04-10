@@ -4,6 +4,9 @@ import pandas as pd
 import matplotlib.pyplot as plt  
 import datetime  
 import base64  
+from fpdf import FPDF  
+import ipywidgets as widgets  
+from IPython.display import display, HTML  
   
 # -------------------------------  
 # 1. Page Config & Data Directory  
@@ -26,6 +29,30 @@ def get_csv_download_link(df, filename, label='Download CSV file'):
     csv = df.to_csv(index=False)  
     b64 = base64.b64encode(csv.encode()).decode()  
     return f'<a href="data:file/csv;base64,{b64}" download="{filename}">{label}</a>'  
+
+# PDF export function using FPDF  
+class PDFReport(FPDF):  
+    def header(self):  
+        self.set_font('Arial', 'B', 16)  
+        self.cell(0, 10, 'Employee Report', 0, 1, 'C')  
+        self.ln(10)  
+  
+    def footer(self):  
+        self.set_y(-15)  
+        self.set_font('Arial', 'I', 8)  
+        self.cell(0, 10, 'Page ' + str(self.page_no()), 0, 0, 'C')  
+  
+    def chapter_body(self, df):  
+        self.set_font('Arial', '', 12)  
+        for index, row in df.iterrows():  
+            line = str(row.to_dict())  
+            self.multi_cell(0, 10, line)  
+        self.ln()  
+  
+    def create_pdf(self, df, output_filename):  
+        self.add_page()  
+        self.chapter_body(df)  
+        self.output(output_filename)  
   
 # -------------------------------  
 # 3. Data Persistence Functions  
@@ -361,240 +388,111 @@ elif module == "Training Records":
 # -------------------------------  
 # 11. Module: Reports  
 # -------------------------------  
-elif module == "Reports":
-    st.header("Reports")
-    
-    report_type = st.selectbox(
-        "Select Report Type",
-        ["Employees by Department", 
-         "Employees by Employment Status", 
-         "Performance Scores by Employee", 
-         "One-on-One Meeting Timelines", 
-         "Training Completion Status", 
-         "Disciplinary Actions by Type"]
-    )
-    
-    # 1. Employees by Department
-    if report_type == "Employees by Department" and not st.session_state.employees.empty:
-        st.subheader("Employees by Department")
-        
-        # Create summary
-        dept_summary = st.session_state.employees['department'].value_counts().reset_index()
-        dept_summary.columns = ['Department', 'Count']
-        
-        # Display table
-        st.dataframe(dept_summary)
-        
-        # Create visualization
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.bar(dept_summary['Department'], dept_summary['Count'], color='skyblue')
-        ax.set_xlabel('Department')
-        ax.set_ylabel('Number of Employees')
-        ax.set_title('Employees by Department')
-        plt.xticks(rotation=45, ha='right')
-        st.pyplot(fig)
-        
-        # Export option
-        st.markdown(get_csv_download_link(dept_summary, "employees_by_department.csv", "Download Department Summary"), unsafe_allow_html=True)
-    
-    # 2. Employees by Employment Status
-    elif report_type == "Employees by Employment Status" and not st.session_state.employees.empty:
-        st.subheader("Employees by Employment Status")
-        
-        # Create summary
-        status_summary = st.session_state.employees['employment_status'].value_counts().reset_index()
-        status_summary.columns = ['Employment Status', 'Count']
-        
-        # Display table
-        st.dataframe(status_summary)
-        
-        # Create visualization
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.bar(status_summary['Employment Status'], status_summary['Count'], color='lightgreen')
-        ax.set_xlabel('Employment Status')
-        ax.set_ylabel('Number of Employees')
-        ax.set_title('Employees by Employment Status')
-        plt.xticks(rotation=45, ha='right')
-        st.pyplot(fig)
-        
-        # Export option
-        st.markdown(get_csv_download_link(status_summary, "employees_by_status.csv", "Download Status Summary"), unsafe_allow_html=True)
-    
-    # 3. Performance Scores by Employee
-    elif report_type == "Performance Scores by Employee" and not st.session_state.reviews.empty:
-        st.subheader("Performance Scores by Employee")
-        
-        # Merge with employee data to get names if available
-        if not st.session_state.employees.empty:
-            employee_names = st.session_state.employees[['employee_id', 'first_name', 'last_name']]
-            performance_data = pd.merge(
-                st.session_state.reviews,
-                employee_names,
-                on='employee_id',
-                how='left'
-            )
-            performance_data['employee_name'] = performance_data['first_name'] + ' ' + performance_data['last_name']
-        else:
-            performance_data = st.session_state.reviews.copy()
-            performance_data['employee_name'] = 'Employee ' + performance_data['employee_id'].astype(str)
-        
-        # Create summary - average score by employee
-        performance_summary = performance_data.groupby('employee_id').agg({
-            'score': 'mean',
-            'employee_name': 'first',
-            'review_date': 'count'
-        }).reset_index()
-        performance_summary.columns = ['Employee ID', 'Average Score', 'Employee Name', 'Number of Reviews']
-        performance_summary = performance_summary.sort_values('Average Score', ascending=False)
-        
-        # Display table
-        st.dataframe(performance_summary)
-        
-        # Create visualization
-        fig, ax = plt.subplots(figsize=(12, 6))
-        ax.bar(performance_summary['Employee Name'], performance_summary['Average Score'], color='coral')
-        ax.set_xlabel('Employee')
-        ax.set_ylabel('Average Performance Score')
-        ax.set_title('Average Performance Scores by Employee')
-        plt.xticks(rotation=45, ha='right')
-        ax.set_ylim(0, 100)  # Assuming scores are out of 100
-        st.pyplot(fig)
-        
-        # Export option
-        st.markdown(get_csv_download_link(performance_summary, "performance_by_employee.csv", "Download Performance Summary"), unsafe_allow_html=True)
-    
-    # 4. One-on-One Meeting Timelines
-    elif report_type == "One-on-One Meeting Timelines" and not st.session_state.meetings.empty:
-        st.subheader("One-on-One Meeting Timelines")
-        
-        # Ensure meeting_date is datetime
-        meetings_data = st.session_state.meetings.copy()
-        meetings_data['meeting_date'] = pd.to_datetime(meetings_data['meeting_date'])
-        
-        # Merge with employee data to get names if available
-        if not st.session_state.employees.empty:
-            employee_names = st.session_state.employees[['employee_id', 'first_name', 'last_name']]
-            meetings_data = pd.merge(
-                meetings_data,
-                employee_names,
-                on='employee_id',
-                how='left'
-            )
-            meetings_data['employee_name'] = meetings_data['first_name'] + ' ' + meetings_data['last_name']
-        else:
-            meetings_data['employee_name'] = 'Employee ' + meetings_data['employee_id'].astype(str)
-        
-        # Sort by date
-        meetings_data = meetings_data.sort_values('meeting_date')
-        
-        # Display table with relevant columns
-        timeline_view = meetings_data[['employee_name', 'meeting_date', 'meeting_time', 'meeting_agenda', 'action_items']]
-        timeline_view.columns = ['Employee', 'Meeting Date', 'Meeting Time', 'Agenda', 'Action Items']
-        st.dataframe(timeline_view)
-        
-        # Create visualization - meetings per month
-        meetings_data['month'] = meetings_data['meeting_date'].dt.strftime('%Y-%m')
-        meeting_counts = meetings_data.groupby('month').size().reset_index()
-        meeting_counts.columns = ['Month', 'Number of Meetings']
-        
-        fig, ax = plt.subplots(figsize=(12, 6))
-        ax.bar(meeting_counts['Month'], meeting_counts['Number of Meetings'], color='purple')
-        ax.set_xlabel('Month')
-        ax.set_ylabel('Number of Meetings')
-        ax.set_title('One-on-One Meetings per Month')
-        plt.xticks(rotation=45, ha='right')
-        st.pyplot(fig)
-        
-        # Export option
-        st.markdown(get_csv_download_link(timeline_view, "meeting_timeline.csv", "Download Meeting Timeline"), unsafe_allow_html=True)
-    
-    # 5. Training Completion Status
-    elif report_type == "Training Completion Status" and not st.session_state.training.empty:
-        st.subheader("Training Completion Status")
-        
-        # Create summary by status
-        training_status = st.session_state.training['status'].value_counts().reset_index()
-        training_status.columns = ['Status', 'Count']
-        
-        # Display table
-        st.dataframe(training_status)
-        
-        # Create visualization
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.pie(training_status['Count'], labels=training_status['Status'], autopct='%1.1f%%', startangle=90, colors=['lightgreen', 'orange', 'lightblue'])
-        ax.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle
-        ax.set_title('Training Completion Status')
-        st.pyplot(fig)
-        
-        # Show detailed training records
-        st.subheader("Detailed Training Records")
-        
-        # Merge with employee data to get names if available
-        if not st.session_state.employees.empty:
-            employee_names = st.session_state.employees[['employee_id', 'first_name', 'last_name']]
-            training_details = pd.merge(
-                st.session_state.training,
-                employee_names,
-                on='employee_id',
-                how='left'
-            )
-            training_details['employee_name'] = training_details['first_name'] + ' ' + training_details['last_name']
-        else:
-            training_details = st.session_state.training.copy()
-            training_details['employee_name'] = 'Employee ' + training_details['employee_id'].astype(str)
-        
-        # Display detailed view
-        training_view = training_details[['employee_name', 'course_name', 'start_date', 'end_date', 'status', 'certification']]
-        training_view.columns = ['Employee', 'Course', 'Start Date', 'End Date', 'Status', 'Certification']
-        st.dataframe(training_view)
-        
-        # Export option
-        st.markdown(get_csv_download_link(training_view, "training_status.csv", "Download Training Status"), unsafe_allow_html=True)
-    
-    # 6. Disciplinary Actions by Type
-    elif report_type == "Disciplinary Actions by Type" and not st.session_state.disciplinary.empty:
-        st.subheader("Disciplinary Actions by Type")
-        
-        # Create summary by type
-        disciplinary_types = st.session_state.disciplinary['type'].value_counts().reset_index()
-        disciplinary_types.columns = ['Action Type', 'Count']
-        
-        # Display table
-        st.dataframe(disciplinary_types)
-        
-        # Create visualization
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.bar(disciplinary_types['Action Type'], disciplinary_types['Count'], color='salmon')
-        ax.set_xlabel('Action Type')
-        ax.set_ylabel('Count')
-        ax.set_title('Disciplinary Actions by Type')
-        plt.xticks(rotation=45, ha='right')
-        st.pyplot(fig)
-        
-        # Show detailed records
-        st.subheader("Detailed Disciplinary Records")
-        
-        # Merge with employee data to get names if available
-        if not st.session_state.employees.empty:
-            employee_names = st.session_state.employees[['employee_id', 'first_name', 'last_name']]
-            disciplinary_details = pd.merge(
-                st.session_state.disciplinary,
-                employee_names,
-                on='employee_id',
-                how='left'
-            )
-            disciplinary_details['employee_name'] = disciplinary_details['first_name'] + ' ' + disciplinary_details['last_name']
-        else:
-            disciplinary_details = st.session_state.disciplinary.copy()
-            disciplinary_details['employee_name'] = 'Employee ' + disciplinary_details['employee_id'].astype(str)
-        
-        # Display detailed view
-        disciplinary_view = disciplinary_details[['employee_name', 'type', 'date', 'description']]
-        disciplinary_view.columns = ['Employee', 'Action Type', 'Date', 'Description']
-        st.dataframe(disciplinary_view)
-        
-        # Export option
-        st.markdown(get_csv_download_link(disciplinary_view, "disciplinary_actions.csv", "Download Disciplinary Actions"), unsafe_allow_html=True)
-    
-    else:
-        st.info("Please select a report type and ensure the relevant data is available.")
+def generate_report(data):  
+    display(HTML('<h2>Robust Report Module</h2>'))  
+      
+    # Date range selection widgets  
+    today = datetime.date.today()  
+    default_from = today - datetime.timedelta(days=30)  
+    date_from_picker = widgets.DatePicker(description='Date From', value=default_from)  
+    date_to_picker = widgets.DatePicker(description='Date To', value=today)  
+      
+    # Grouping Options widget  
+    grouping_options = widgets.SelectMultiple(  
+        options=['Employee', 'Department', 'Job Title'],  
+        value=['Employee'],  
+        description='Group by',  
+        disabled=False  
+    )  
+      
+    # Export option widget  
+    export_dropdown = widgets.Dropdown(  
+        options=['None', 'CSV', 'PDF'],  
+        value='None',  
+        description='Export Format',  
+        disabled=False,  
+    )  
+  
+    # Button to trigger report generation  
+    generate_button = widgets.Button(description='Generate Report')  
+    output_area = widgets.Output()  
+  
+    def on_generate_clicked(b):  
+        with output_area:  
+            output_area.clear_output()  
+            # Retrieve date range  
+            date_from = date_from_picker.value  
+            date_to = date_to_picker.value  
+            if date_from is None or date_to is None:  
+                print('Please select both start and end dates.')  
+                return  
+              
+            # Filter dataframe based on date (expects a "date" column)  
+            if 'date' in data.columns:  
+                df = data.copy()  
+                df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.date  
+                mask = (df['date'] >= date_from) & (df['date'] <= date_to)  
+                report_df = df.loc[mask].copy()  
+            else:  
+                print('No date column found in data. Showing full data.')  
+                report_df = data.copy()  
+                  
+            # Determine grouping based on selected options  
+            selected_groupings = list(grouping_options.value)  
+            group_cols = []  
+            for option in selected_groupings:  
+                if option == 'Employee' and 'employee' in report_df.columns:  
+                    group_cols.append('employee')  
+                elif option == 'Department' and 'department' in report_df.columns:  
+                    group_cols.append('department')  
+                elif option == 'Job Title' and 'job_title' in report_df.columns:  
+                    group_cols.append('job_title')  
+                      
+            if group_cols:  
+                report_grouped = report_df.groupby(group_cols).size().reset_index(name='Count')  
+            else:  
+                report_grouped = report_df.copy()  
+              
+            print('Report Data:')  
+            display(report_grouped)  
+              
+            # Plotting report if a "Count" column is available  
+            if 'Count' in report_grouped.columns and not report_grouped.empty:  
+                fig, ax = plt.subplots(figsize=(12, 8))  
+                ax.bar(report_grouped.index.astype(str), report_grouped['Count'], color='#2563EB')  
+                ax.set_xlabel('Group', labelpad=10)  
+                ax.set_ylabel('Count', labelpad=10)  
+                ax.set_title('Report Grouped by ' + ', '.join(selected_groupings), pad=15)  
+                ax.set_axisbelow(True)  
+                plt.xticks(rotation=45, ha='right')  
+                plt.show()  
+              
+            # Handle export options  
+            export_format = export_dropdown.value  
+            if export_format == 'CSV':  
+                display(get_csv_download_link(report_grouped, 'report.csv', 'Download Report as CSV'))  
+            elif export_format == 'PDF':  
+                pdf = PDFReport()  
+                output_filename = 'report.pdf'  
+                pdf.create_pdf(report_grouped, output_filename)  
+                with open(output_filename, 'rb') as f:  
+                    pdf_data = f.read()  
+                b64_pdf = base64.b64encode(pdf_data).decode()  
+                pdf_link = '<a href="data:application/octet-stream;base64,' + b64_pdf + '" download="' + output_filename + '">Download Report as PDF</a>'  
+                display(HTML(pdf_link))  
+                print('PDF report generated successfully')  
+            else:  
+                print('No export selected.')  
+      
+    generate_button.on_click(on_generate_clicked)  
+      
+    # Display the widget layout  
+    widget_box = widgets.VBox([  
+        date_from_picker,  
+        date_to_picker,  
+        grouping_options,  
+        export_dropdown,  
+        generate_button,  
+        output_area  
+    ])  
+    display(widget_box)  
