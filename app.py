@@ -212,10 +212,14 @@ elif module == "Disciplinary Actions":
         with col1:  
             disciplinary_id = st.text_input("Disciplinary ID (max 6 digits)", max_chars=6)  
             employee_id = st.text_input("Employee ID (max 6 digits)", max_chars=6)  
-            d_type = st.text_input("Type")  
+            d_date = st.date_input("Period", datetime.date.today())  
+            d_type = st.text_input("Violation")  
+            d_date = st.date_input("Interview Date", datetime.date.today())  
         with col2:  
-            d_date = st.date_input("Date", datetime.date.today())  
-            description = st.text_area("Description")  
+            description = st.text_area("Reason")  
+            description = st.text_area("Action") 
+            description = st.text_area("Interviewer") 
+            description = st.text_area("Decision")
         submitted_disc = st.form_submit_button("Record Disciplinary Action")  
         if submitted_disc:  
             if disciplinary_id == "" or not disciplinary_id.isdigit():  
@@ -226,9 +230,13 @@ elif module == "Disciplinary Actions":
                 new_disc = pd.DataFrame({  
                     "disciplinary_id": [disciplinary_id],  
                     "employee_id": [employee_id],  
-                    "type": [d_type],  
-                    "date": [d_date.strftime('%Y-%m-%d')],  
-                    "description": [description]  
+                    "Period": [d_date.strftime('%Y-%m-%d')],  
+                    "Violation": [d_type],  
+                    "Interview Date": [d_date.strftime('%Y-%m-%d')],  
+                    "Reason": [description], 
+                    "Action": [description], 
+                    "Interviewer": [description], 
+                    "Decision": [description] 
                 })  
                 st.session_state.disciplinary = pd.concat([st.session_state.disciplinary, new_disc], ignore_index=True)  
                 st.success("Disciplinary action recorded successfully!")  
@@ -427,161 +435,3 @@ elif module == "Reports":
           
         # Export option  
         st.markdown(get_csv_download_link(meeting_freq, "meeting_frequency.csv", "Download Meeting Frequency"), unsafe_allow_html=True)  
-import os    
-import streamlit as st    
-import pandas as pd    
-import matplotlib.pyplot as plt    
-import datetime    
-import base64    
-  
-# -------------------------------  
-# 1. Page Config & Data Directory  
-# -------------------------------  
-st.set_page_config(    
-    page_title="Employee Records Tool",    
-    page_icon="👥",    
-    layout="wide",    
-    initial_sidebar_state="expanded"    
-)    
-  
-DATA_DIR = 'data'    
-if not os.path.exists(DATA_DIR):    
-    os.makedirs(DATA_DIR)    
-  
-# -------------------------------  
-# 2. CSV Download Helper Function  
-# -------------------------------  
-def get_csv_download_link(df, filename, label='Download CSV file'):    
-    csv = df.to_csv(index=False)    
-    b64 = base64.b64encode(csv.encode()).decode()    
-    return '<a href="data:file/csv;base64,' + b64 + '" download="' + filename + '">' + label + '</a>'    
-  
-# -------------------------------  
-# 3. Data Persistence Functions  
-# -------------------------------  
-def load_table(table_name, columns):    
-    path = os.path.join(DATA_DIR, f'{table_name}.csv')    
-    if os.path.exists(path):    
-        return pd.read_csv(path)    
-    else:    
-        return pd.DataFrame({col: [] for col in columns})    
-  
-def save_table(table_name, df):    
-    path = os.path.join(DATA_DIR, f'{table_name}.csv')    
-    df.to_csv(path, index=False)    
-    st.success(table_name.capitalize() + " data saved successfully!")    
-  
-def load_from_uploaded_file(uploaded_file, columns):    
-    try:    
-        df = pd.read_csv(uploaded_file)    
-        # Ensure all required columns exist    
-        for col in columns:    
-            if col not in df.columns:    
-                df[col] = ""    
-        return df    
-    except Exception as e:    
-        st.error("Error loading file: " + str(e))    
-        return pd.DataFrame({col: [] for col in columns})  
-  
-# -------------------------------  
-# 4. Session State Initialization for Modules  
-# -------------------------------  
-# Define columns for other modules  
-performance_columns = ["review_id", "employee_id", "review_date", "reviewer", "score", "comments"]  
-training_columns = ["training_id", "employee_id", "course_name", "start_date", "end_date", "status", "certification"]  
-  
-# Define updated disciplinary columns  
-disciplinary_columns = ["Period (Date)", "disciplinary_id", "ID", "First Name", "Last Name",   
-                        "Job Title", "Violation", "Interview Date", "Reason", "Comments",   
-                        "Interviewer", "Decision"]  
-  
-if 'disciplinary' not in st.session_state:    
-    st.session_state.disciplinary = load_table("disciplinary", disciplinary_columns)    
-if 'performance' not in st.session_state:    
-    st.session_state.performance = load_table("performance", performance_columns)    
-if 'training' not in st.session_state:    
-    st.session_state.training = load_table("training", training_columns)    
-  
-# -------------------------------  
-# 5. Sidebar - Module Navigation  
-# -------------------------------  
-module = st.sidebar.selectbox("Select Module",   
-    ["Employee Management", "One-on-One Meetings", "Disciplinary Actions", "Performance Reviews", "Training Records", "Reports"])  
-  
-# -------------------------------  
-# Other modules of the app would go here...  
-# -------------------------------  
-  
-# -------------------------------  
-# 8. Module: Disciplinary Actions    
-# -------------------------------  
-if module == "Disciplinary Actions":  
-    st.header("Disciplinary Actions")  
-      
-    # File upload for disciplinary data  
-    uploaded_disciplinary = st.file_uploader("Upload Disciplinary CSV", type="csv", key="disciplinary_upload")  
-    if uploaded_disciplinary is not None:  
-        st.session_state.disciplinary = load_from_uploaded_file(uploaded_disciplinary, disciplinary_columns)  
-        st.success("Disciplinary data uploaded successfully!")  
-      
-    # Updated form with adjusted columns for Disciplinary Actions  
-    with st.form("disciplinary_form"):  
-        st.subheader("Record Disciplinary Action")  
-          
-        col1, col2, col3 = st.columns(3)  
-        # First column inputs  
-        with col1:  
-            period_date = st.date_input("Period (Date)", datetime.date.today())  
-            disciplinary_id = st.text_input("Disciplinary ID (max 6 digits)", max_chars=6)  
-            emp_id = st.text_input("ID (Employee ID - max 6 digits)", max_chars=6)  
-            first_name = st.text_input("First Name")  
-        # Second column inputs  
-        with col2:  
-            last_name = st.text_input("Last Name")  
-            job_title = st.text_input("Job Title")  
-            violation = st.text_input("Violation")  
-            interview_date = st.date_input("Interview Date", datetime.date.today())  
-        # Third column inputs  
-        with col3:  
-            reason = st.text_area("Reason")  
-            comments = st.text_area("Comments")  
-            action = st.text_input("Action")  
-            interviewer = st.text_input("Interviewer")  
-            decision = st.text_input("Decision")  
-          
-        submitted_disc = st.form_submit_button("Record Disciplinary Action")  
-        if submitted_disc:  
-            # Validate numeric inputs for IDs  
-            if disciplinary_id == "" or not disciplinary_id.isdigit():  
-                st.error("Please enter a valid numeric Disciplinary ID (up to 6 digits).")  
-            elif emp_id == "" or not emp_id.isdigit():  
-                st.error("Please enter a valid numeric Employee ID (up to 6 digits).")  
-            else:  
-                new_disc = pd.DataFrame({  
-                    "Period (Date)": [period_date.strftime('%Y-%m-%d')],  
-                    "disciplinary_id": [disciplinary_id],  
-                    "ID": [emp_id],  
-                    "First Name": [first_name],  
-                    "Last Name": [last_name],  
-                    "Job Title": [job_title],  
-                    "Violation": [violation],  
-                    "Interview Date": [interview_date.strftime('%Y-%m-%d')],  
-                    "Reason": [reason],  
-                    "Comments": [comments],  
-                    "Interviewer": [interviewer],  
-                    "Decision": [decision]  
-                })  
-                st.session_state.disciplinary = pd.concat([st.session_state.disciplinary, new_disc], ignore_index=True)  
-                st.success("Disciplinary action recorded successfully!")  
-      
-    st.subheader("Disciplinary Actions Table")  
-    st.dataframe(st.session_state.disciplinary)  
-    st.markdown(get_csv_download_link(st.session_state.disciplinary, "disciplinary.csv", "Download Disciplinary CSV"), unsafe_allow_html=True)  
-    if st.button("Save Disciplinary Data"):  
-        save_table("disciplinary", st.session_state.disciplinary)  
-  
-# -------------------------------  
-# 9. Other Modules and Dashboard Components  
-# -------------------------------  
-# ... (remaining code for performance, training, reports, etc.)  
-# For example, code handling Performance Reviews, Training Records, and Reports  
