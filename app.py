@@ -106,39 +106,40 @@ def init_sqlite_db():
     conn.close()  
   
 def load_table_from_sqlite(table_name):  
-    """Load data from SQLite into a pandas DataFrame."""  
+    """Load data from SQLite into pandas DataFrame"""  
     conn = sqlite3.connect('employee_database.db')  
     try:  
         query = f"SELECT * FROM {table_name}"  
         df = pd.read_sql_query(query, conn)  
-    except Exception as e:  
-        st.error("Error loading table " + table_name + ": " + str(e))  
-        df = pd.DataFrame()  
+        return df  
+    except:  
+        # Return empty DataFrame if table doesn't exist or is empty  
+        if table_name == "employees":  
+            return pd.DataFrame(columns=["employee_id", "first_name", "last_name", "email", "phone", "department", "job_title", "hire_date", "employment_status"])  
+        else:  
+            return pd.DataFrame()  
     finally:  
         conn.close()  
-    return df  
   
 def save_table_to_sqlite(table_name, df):  
-    """Save a pandas DataFrame to a SQLite table."""  
+    """Save pandas DataFrame to SQLite table"""  
     if df is None or df.empty:  
-        print("Not saving " + table_name + " - data is empty")  
         return  
+          
     conn = sqlite3.connect('employee_database.db')  
     df.to_sql(table_name, conn, if_exists='replace', index=False)  
     conn.close()  
-    print(table_name + " data saved successfully!")  
   
 # Load all data function  
 def load_all_data():  
-    """Load all data from the SQLite database into session state."""  
+    """Load all data from SQLite database"""  
     tables = ["employees", "meetings", "disciplinary", "performance", "training", "activity"]  
     for table_name in tables:  
         st.session_state[table_name] = load_table_from_sqlite(table_name)  
-        print("Loaded " + table_name + " data: " + str(len(st.session_state[table_name])) + " records")  
   
 # Save all data function  
 def save_all_data():  
-    """Save all data from session state to the SQLite database."""  
+    """Save all data to SQLite database"""  
     tables = ["employees", "meetings", "disciplinary", "performance", "training", "activity"]  
     for table_name in tables:  
         if table_name in st.session_state and not st.session_state[table_name].empty:  
@@ -152,19 +153,21 @@ def load_from_uploaded_file(uploaded_file, columns):
     """Load data from an uploaded CSV file into a pandas DataFrame."""  
     try:  
         df = pd.read_csv(uploaded_file)  
-        # Check for required columns.  
+          
+        # Check if all required columns are present  
         missing_columns = [col for col in columns if col not in df.columns]  
         if missing_columns:  
-            st.warning("Missing columns in uploaded file: " + ", ".join(missing_columns))  
-            # Return an empty DataFrame with required columns  
+            st.warning(f"Missing columns in uploaded file: {', '.join(missing_columns)}")  
+            # Return empty DataFrame with required columns  
             return pd.DataFrame(columns=columns)  
+          
         return df  
     except Exception as e:  
-        st.error("Error loading file: " + str(e))  
+        st.error(f"Error loading file: {str(e)}")  
         return pd.DataFrame(columns=columns)  
   
 # -------------------------------  
-# 5. Initialize Database & Load Data  
+# 5. Initialize Database and Load Data  
 # -------------------------------  
 init_sqlite_db()  
   
