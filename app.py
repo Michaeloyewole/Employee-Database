@@ -3,7 +3,8 @@ import streamlit as st
 import pandas as pd  
 import matplotlib.pyplot as plt  
 import datetime  
-import base64   
+import base64  
+import sqlite3  
   
 # -------------------------------  
 # 1. Page Config & Data Directory  
@@ -27,9 +28,9 @@ def get_csv_download_link(df, filename, label='Download CSV file'):
     b64 = base64.b64encode(csv.encode()).decode()  
     return f'<a href="data:file/csv;base64,{b64}" download="{filename}">{label}</a>'  
   
-# ----------------------------------------------------------------------  
-# 3. SQLITE DATABASE FUNCTIONS  
-# ----------------------------------------------------------------------  
+# -------------------------------  
+# 3. SQLite Database Functions  
+# -------------------------------  
 def init_sqlite_db():  
     """Initialize SQLite database with required tables."""  
     conn = sqlite3.connect('employee_database.db')  
@@ -104,115 +105,90 @@ def init_sqlite_db():
     conn.close()  
   
 def load_table_from_sqlite(table_name):  
-    """Load data from a SQLite table into a pandas DataFrame."""  
+    """Load data from SQLite into a pandas DataFrame."""  
     conn = sqlite3.connect('employee_database.db')  
-    query = f"SELECT * FROM {table_name}"  
     try:  
+        query = f"SELECT * FROM {table_name}"  
         df = pd.read_sql_query(query, conn)  
+        return df  
     except Exception as e:  
-        st.error("Error loading table " + table_name + ": " + str(e))  
-        df = pd.DataFrame()  
-    conn.close()  
-    return df  
+        st.error(f"Error loading {table_name} from SQLite: " + str(e))  
+        return pd.DataFrame()  
+    finally:  
+        conn.close()  
   
 def save_table_to_sqlite(table_name, df):  
-    """Save a pandas DataFrame to a SQLite table."""  
+    """Save pandas DataFrame to SQLite table."""  
     if df is None or df.empty:  
-        st.warning("No data in " + table_name + " table to save.")  
         return  
     conn = sqlite3.connect('employee_database.db')  
-    try:  
-        df.to_sql(table_name, conn, if_exists='replace', index=False)  
-    except Exception as e:  
-        st.error("Error saving table " + table_name + ": " + str(e))  
+    df.to_sql(table_name, conn, if_exists='replace', index=False)  
     conn.close()  
   
-# ----------------------------------------------------------------------  
-# 4. SESSION STATE DATA LOADING & SAVING  
-# ----------------------------------------------------------------------  
 def load_all_data():  
-    """Load all data from SQLite into session state."""  
+    """Load all data from the SQLite database into session state."""  
     tables = ["employees", "meetings", "disciplinary", "performance", "training", "activity"]  
     for table_name in tables:  
         st.session_state[table_name] = load_table_from_sqlite(table_name)  
-        print("Loaded " + table_name + " with " + str(len(st.session_state[table_name])) + " records.")  
+        print(f"Loaded {table_name} data: {len(st.session_state[table_name])} records")  
   
 def save_all_data():  
-    """Save all data from session state to SQLite."""  
+    """Save all data from session state to the SQLite database."""  
     tables = ["employees", "meetings", "disciplinary", "performance", "training", "activity"]  
     for table_name in tables:  
-        # Only save if the table exists in session state and is not empty  
         if table_name in st.session_state and not st.session_state[table_name].empty:  
             save_table_to_sqlite(table_name, st.session_state[table_name])  
     st.success("All data saved successfully!")  
   
-# ----------------------------------------------------------------------  
-# 5. FILE UPLOAD SUPPORT  
-# ----------------------------------------------------------------------  
+# -------------------------------  
+# 4. File Upload Functions  
+# -------------------------------  
 def load_from_uploaded_file(uploaded_file, columns):  
-    """Load a CSV file from an uploaded file and ensure it contains specified columns."""  
+    """Load data from an uploaded CSV file into a pandas DataFrame."""  
     try:  
         df = pd.read_csv(uploaded_file)  
-        # Optional: Check if required columns exist; if not, initialize an empty DataFrame  
-        missing_cols = set(columns) - set(df.columns)  
-        if missing_cols:  
-            st.warning("Missing columns in uploaded file: " + ", ".join(missing_cols))  
-            df = pd.DataFrame(columns=columns)  
+        # Check if all required columns are present  
+        missing_columns = [col for col in columns if col not in df.columns]  
+        if missing_columns:  
+            st.warning("Missing columns in uploaded file: " + ", ".join(missing_columns))  
+            return pd.DataFrame(columns=columns)  
         return df  
     except Exception as e:  
-        st.error("Error loading the uploaded file: " + str(e))  
+        st.error("Error loading file: " + str(e))  
         return pd.DataFrame(columns=columns)  
   
-# ----------------------------------------------------------------------  
-# 6. INITIALIZATION & DATA MANAGEMENT UI  
-# ----------------------------------------------------------------------  
-# Initialize the SQLite database  
+# -------------------------------  
+# 5. Initialize Database and Session State  
+# -------------------------------  
 init_sqlite_db()  
   
-# Initialize session state marker for data loading  
 if "data_loaded" not in st.session_state:  
     st.session_state.data_loaded = False  
   
-# Load all data if not already loaded  
 if not st.session_state.data_loaded:  
     load_all_data()  
     st.session_state.data_loaded = True  
   
-# Sidebar for data management  
+# -------------------------------  
+# 6. Data Management UI  
+# -------------------------------  
 st.sidebar.title("Data Management")  
 if st.sidebar.button("💾 Save All Data"):  
     save_all_data()  
   
-# Example: Upload Employees CSV file  
+# -------------------------------  
+# 7. CSV Upload Option for Employees Data  
+# -------------------------------  
 employee_columns = ["employee_id", "first_name", "last_name", "email", "phone", "department", "job_title", "hire_date", "employment_status"]  
 uploaded_employees = st.file_uploader("Upload Employees CSV", type=["csv"])  
 if uploaded_employees is not None:  
     st.session_state.employees = load_from_uploaded_file(uploaded_employees, employee_columns)  
-    st.success("Employees data loaded from the uploaded file.")  
+    st.success("Employee data uploaded successfully!")  
   
-# Optionally, display a preview of the data  
+# Optionally display a preview of the employees data  
 if "employees" in st.session_state:  
     st.subheader("Employees Data Preview")  
     st.dataframe(st.session_state.employees)  
-# -------------------------------  
-# 7. Initialize Session State  
-# -------------------------------  
-employee_columns = ["employee_id", "first_name", "last_name", "department", "job_title", "email", "phone", "employment_status"]  
-meeting_columns = ["meeting_id", "employee_id", "meeting_date", "meeting_time", "Meeting Agenda", "action_items", "notes", "next_meeting_date"]  
-disciplinary_columns = ["disciplinary_id", "employee_id", "type", "date", "description"]  
-performance_columns = ["review_id", "employee_id", "review_date", "reviewer", "score", "comments"]  
-training_columns = ["training_id", "employee_id", "course_name", "start_date", "end_date", "status", "certification"]  
-  
-if 'employees' not in st.session_state:  
-    st.session_state.employees = load_table("employees", employee_columns)  
-if 'meetings' not in st.session_state:  
-    st.session_state.meetings = load_table("meetings", meeting_columns)  
-if 'disciplinary' not in st.session_state:  
-    st.session_state.disciplinary = load_table("disciplinary", disciplinary_columns)  
-if 'performance' not in st.session_state:  
-    st.session_state.performance = load_table("performance", performance_columns)  
-if 'training' not in st.session_state:  
-    st.session_state.training = load_table("training", training_columns)  
   
 # -------------------------------  
 # 8. Sidebar Navigation  
