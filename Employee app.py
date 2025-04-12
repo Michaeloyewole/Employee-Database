@@ -202,19 +202,6 @@ disciplinary_columns = ['disciplinary_id', 'employee_id', 'type', 'date', 'descr
 performance_columns = ['review_id', 'employee_id', 'review_date', 'reviewer', 'score', 'comments']  
 training_columns = ['training_id', 'employee_id', 'course_name', 'start_date', 'end_date', 'status', 'certification']  
   
-# Your original file uploaders remain here:  
-uploaded_employees = st.file_uploader("Upload Employees CSV", type="csv")  
-if uploaded_employees is not None:  
-    try:  
-        st.session_state.employees = pd.read_csv(uploaded_employees)  
-    except Exception as e:  
-        st.error("Error reading uploaded employee file: " + str(e))  
-else:  
-    if 'employees' not in st.session_state:  
-        st.session_state.employees = pd.DataFrame(columns=employee_columns)  
-  
-# (Repeat for meetings, disciplinary, performance, training as in your 742-line file...)  
-  
 # -------------------------------  
 # Initialize session state data from SQLite if not already loaded  
 # -------------------------------  
