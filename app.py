@@ -30,61 +30,168 @@ def get_csv_download_link(df, filename, label='Download CSV file'):
 # -------------------------------  
 # 3. Data Persistence Functions  
 # -------------------------------  
-def load_table(table_name, columns):    
-    path = os.path.join(DATA_DIR, f'{table_name}.csv')    
-    if os.path.exists(path):    
-        return pd.read_csv(path)    
-    else:    
-        return pd.DataFrame({col: [] for col in columns})  
+def init_sqlite_db():  
+    """Initialize SQLite database with required tables."""  
+    conn = sqlite3.connect('employee_database.db')  
+    cursor = conn.cursor()  
+    # Create employees table  
+    cursor.execute('''  
+    CREATE TABLE IF NOT EXISTS employees (  
+        employee_id INTEGER PRIMARY KEY,  
+        first_name TEXT,  
+        last_name TEXT,  
+        email TEXT,  
+        phone TEXT,  
+        department TEXT,  
+        job_title TEXT,  
+        hire_date TEXT,  
+        employment_status TEXT  
+    )  
+    ''')  
+    # Create meetings table  
+    cursor.execute('''  
+    CREATE TABLE IF NOT EXISTS meetings (  
+        meeting_id INTEGER PRIMARY KEY,  
+        employee_id INTEGER,  
+        date TEXT,  
+        meeting_type TEXT,  
+        notes TEXT  
+    )  
+    ''')  
+    # Create disciplinary table  
+    cursor.execute('''  
+    CREATE TABLE IF NOT EXISTS disciplinary (  
+        disciplinary_id INTEGER PRIMARY KEY,  
+        employee_id INTEGER,  
+        date TEXT,  
+        violation_type TEXT,  
+        action_taken TEXT,  
+        notes TEXT  
+    )  
+    ''')  
+    # Create performance table  
+    cursor.execute('''  
+    CREATE TABLE IF NOT EXISTS performance (  
+        performance_id INTEGER PRIMARY KEY,  
+        employee_id INTEGER,  
+        date TEXT,  
+        rating INTEGER,  
+        notes TEXT  
+    )  
+    ''')  
+    # Create training table  
+    cursor.execute('''  
+    CREATE TABLE IF NOT EXISTS training (  
+        training_id INTEGER PRIMARY KEY,  
+        employee_id INTEGER,  
+        date TEXT,  
+        training_type TEXT,  
+        completion_status TEXT,  
+        notes TEXT  
+    )  
+    ''')  
+    # Create activity table  
+    cursor.execute('''  
+    CREATE TABLE IF NOT EXISTS activity (  
+        activity_id INTEGER PRIMARY KEY,  
+        employee_id INTEGER,  
+        date TEXT,  
+        activity_type TEXT,  
+        notes TEXT  
+    )  
+    ''')  
+    conn.commit()  
+    conn.close()  
   
-def save_table(table_name, df):    
+def load_table_from_sqlite(table_name):  
+    """Load data from SQLite into a pandas DataFrame."""  
+    conn = sqlite3.connect('employee_database.db')  
     try:  
-        path = os.path.join(DATA_DIR, f'{table_name}.csv')    
-        df.to_csv(path, index=False)    
-        st.success(f"{table_name.capitalize()} data saved successfully!")  
+        query = f"SELECT * FROM {table_name}"  
+        df = pd.read_sql_query(query, conn)  
+        return df  
     except Exception as e:  
-        st.error(f"Error saving {table_name} data: {str(e)}")  
+        st.error("Error loading table " + table_name + ": " + str(e))  
+        return pd.DataFrame()  
+    finally:  
+        conn.close()  
+  
+def save_table_to_sqlite(table_name, df):  
+    """Save a pandas DataFrame to the SQLite table."""  
+    if df is None or df.empty:  
+        return  
+    conn = sqlite3.connect('employee_database.db')  
+    try:  
+        df.to_sql(table_name, conn, if_exists='replace', index=False)  
+    except Exception as e:  
+        st.error("Error saving table " + table_name + ": " + str(e))  
+    finally:  
+        conn.close()  
   
 def load_all_data():  
-    """Load all data from CSV files at startup"""  
-    # Define the tables and their columns  
-    tables = {  
-        "employees": ["employee_id", "first_name", "last_name", "email", "phone", "department", "job_title", "hire_date", "employment_status"],  
-        "meetings": ["meeting_id", "employee_id", "date", "meeting_type", "notes"],  
-        "disciplinary": ["disciplinary_id", "employee_id", "date", "violation_type", "action_taken", "notes"],  
-        "performance": ["performance_id", "employee_id", "date", "rating", "notes"],  
-        "training": ["training_id", "employee_id", "date", "training_type", "completion_status", "notes"],  
-        "activity": ["activity_id", "employee_id", "date", "activity_type", "notes"]  
-    }  
-      
-    # Load each table into session state  
-    for table_name, columns in tables.items():  
-        if table_name not in st.session_state:  
-            st.session_state[table_name] = load_table(table_name, columns)  
-            print(f"Loaded {table_name} data: {len(st.session_state[table_name])} records")  
+    """Load all data from the SQLite database into session state."""  
+    tables = ["employees", "meetings", "disciplinary", "performance", "training", "activity"]  
+    for tbl in tables:  
+        st.session_state[tbl] = load_table_from_sqlite(tbl)  
+        print("Loaded " + tbl + " data: " + str(len(st.session_state[tbl])) + " records.")  
   
 def save_all_data():  
-    """Save all data to CSV files"""  
+    """Save all data in session state to the SQLite database."""  
     tables = ["employees", "meetings", "disciplinary", "performance", "training", "activity"]  
-    for table_name in tables:  
-        if table_name in st.session_state and not st.session_state[table_name].empty:  
-            save_table(table_name, st.session_state[table_name])  
+    for tbl in tables:  
+        if tbl in st.session_state and not st.session_state[tbl].empty:  
+            save_table_to_sqlite(tbl, st.session_state[tbl])  
+    st.success("All data saved successfully!")  
   
-# Initialize session state for tracking if data is loaded  
+# ----------------------------------------------------------------------  
+# 4. HELPER FUNCTION FOR LOADING UPLOADED FILES  
+# ----------------------------------------------------------------------  
+def load_from_uploaded_file(uploaded_file, columns):  
+    """Load a CSV file from user upload into a DataFrame."""  
+    if uploaded_file is not None:  
+        try:  
+            df = pd.read_csv(uploaded_file)  
+            return df  
+        except Exception as e:  
+            st.error("Error loading uploaded file: " + str(e))  
+            return pd.DataFrame(columns=columns)  
+    else:  
+        return pd.DataFrame(columns=columns)  
+  
+# ----------------------------------------------------------------------  
+# 5. INITIALIZE DATABASE AND LOAD DATA  
+# ----------------------------------------------------------------------  
+init_sqlite_db()  
+  
 if "data_loaded" not in st.session_state:  
     st.session_state.data_loaded = False  
   
-# Load data if not already loaded  
 if not st.session_state.data_loaded:  
     load_all_data()  
     st.session_state.data_loaded = True  
   
-# Add a save button to the sidebar  
+# ----------------------------------------------------------------------  
+# 6. DATA MANAGEMENT UI  
+# ----------------------------------------------------------------------  
 st.sidebar.title("Data Management")  
 if st.sidebar.button("💾 Save All Data"):  
     save_all_data()  
+  
+# Example usage: Upload employees CSV file  
+employee_columns = ["employee_id", "first_name", "last_name", "email", "phone", "department", "job_title", "hire_date", "employment_status"]  
+uploaded_employees = st.file_uploader("Upload Employees CSV", type=["csv"])  
+if uploaded_employees is not None:  
+    st.session_state.employees = load_from_uploaded_file(uploaded_employees, employee_columns)  
+    st.success("Employees data loaded from uploaded file.")  
+  
+# You can add similar blocks for meetings, disciplinary records, etc.  
+  
+# Optionally, show a preview of the data  
+if "employees" in st.session_state:  
+    st.subheader("Employees Data Preview")  
+    st.dataframe(st.session_state.employees)  
 # -------------------------------  
-# 4. Initialize Session State  
+# 7. Initialize Session State  
 # -------------------------------  
 employee_columns = ["employee_id", "first_name", "last_name", "department", "job_title", "email", "phone", "employment_status"]  
 meeting_columns = ["meeting_id", "employee_id", "meeting_date", "meeting_time", "Meeting Agenda", "action_items", "notes", "next_meeting_date"]  
@@ -104,7 +211,7 @@ if 'training' not in st.session_state:
     st.session_state.training = load_table("training", training_columns)  
   
 # -------------------------------  
-# 5. Sidebar Navigation  
+# 8. Sidebar Navigation  
 # -------------------------------  
 st.sidebar.title("Employee Records Tool")  
 module = st.sidebar.selectbox(  
@@ -113,7 +220,7 @@ module = st.sidebar.selectbox(
 )  
   
 # -------------------------------  
-# 6. Module: Employee Management  
+# 9. Module: Employee Management  
 # -------------------------------  
 if module == "Employee Management":  
     st.header("Employee Management")  
@@ -167,7 +274,7 @@ if module == "Employee Management":
         save_table("employees", st.session_state.employees)  
   
 # -------------------------------  
-# 7. Module: One-on-One Meetings  
+# 10. Module: One-on-One Meetings  
 # -------------------------------  
 elif module == "One-on-One Meetings":  
     st.header("One-on-One Meetings")  
@@ -217,7 +324,7 @@ elif module == "One-on-One Meetings":
         save_table("meetings", st.session_state.meetings)  
   
 # -------------------------------  
-# 8. Module: Disciplinary Actions  
+# 11. Module: Disciplinary Actions  
 # -------------------------------  
 elif module == "Disciplinary Actions":  
     st.header("Disciplinary Actions")  
@@ -286,7 +393,7 @@ elif module == "Disciplinary Actions":
     if st.button("Save Disciplinary Data"):  
         save_table("disciplinary", st.session_state.disciplinary)  
 # -------------------------------  
-# 9. Module: Performance Reviews  
+# 12. Module: Performance Reviews  
 # -------------------------------  
 elif module == "Performance Reviews":  
     st.header("Performance Reviews")  
@@ -332,7 +439,7 @@ elif module == "Performance Reviews":
         save_table("performance", st.session_state.performance)  
   
 # -------------------------------  
-# 10. Module: Training Records  
+# 13. Module: Training Records  
 # -------------------------------  
 elif module == "Training Records":  
     st.header("Training Records")  
@@ -380,7 +487,7 @@ elif module == "Training Records":
         save_table("training", st.session_state.training)  
   
 # -------------------------------  
-# 11. Module: Reports  
+# 14. Module: Reports  
 # -------------------------------  
 # -------------------------------  
 # Reports Module  
