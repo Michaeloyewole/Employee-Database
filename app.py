@@ -183,14 +183,6 @@ if st.sidebar.button("💾 Save All Data"):
     save_all_data()  
   
 # -------------------------------  
-# 7. CSV Upload Option for Employees Data  
-# -------------------------------  
-employee_columns = ["employee_id", "first_name", "last_name", "email", "phone", "department", "job_title", "hire_date", "employment_status"]  
-uploaded_employees = st.file_uploader("Upload Employees CSV", type=["csv"])  
-if uploaded_employees is not None:  
-    st.session_state.employees = load_from_uploaded_file(uploaded_employees, employee_columns)  
-    st.success("Employee data uploaded successfully!")
-# -------------------------------  
 # 8. Sidebar Navigation  
 # -------------------------------  
 st.sidebar.title("Employee Records Tool")  
