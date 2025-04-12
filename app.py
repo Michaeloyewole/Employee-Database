@@ -141,7 +141,7 @@ def load_from_uploaded_file(uploaded_file, columns):
         st.error(f"Error loading file: {e}")  
         return pd.DataFrame({col: [] for col in columns})  
 
--------------------------------  
+# -------------------------------  
 # 4. SQLite Data Persistence Functions  
 # -------------------------------  
 def load_table_from_sqlite(table_name):  
