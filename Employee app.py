@@ -30,59 +30,38 @@ def get_csv_download_link(df, filename, label='Download CSV file'):
 # -------------------------------  
 # 3. Data Persistence Functions  
 # -------------------------------  
-def load_table(table_name, columns):    
-    path = os.path.join(DATA_DIR, f'{table_name}.csv')    
-    if os.path.exists(path):    
-        return pd.read_csv(path)    
-    else:    
+def load_table(table_name, columns):  
+    path = os.path.join(DATA_DIR, f'{table_name}.csv')  
+    if os.path.exists(path):  
+        return pd.read_csv(path)  
+    else:  
         return pd.DataFrame({col: [] for col in columns})  
   
-def save_table(table_name, df):    
+def save_table(table_name, df):  
+    path = os.path.join(DATA_DIR, f'{table_name}.csv')  
+    df.to_csv(path, index=False)  
+    st.success(f"{table_name.capitalize()} data saved successfully!")  
+  
+def get_employee_display_name(employee_id):  
+    if employee_id is None or pd.isna(employee_id):  
+        return "N/A"  
+    employee = st.session_state.employees[st.session_state.employees['employee_id'] == employee_id]  
+    if not employee.empty:  
+        return f"{employee['first_name'].values[0]} {employee['last_name'].values[0]}"  
+    return "Unknown"  
+  
+def load_from_uploaded_file(uploaded_file, columns):  
     try:  
-        path = os.path.join(DATA_DIR, f'{table_name}.csv')    
-        df.to_csv(path, index=False)    
-        st.success(f"{table_name.capitalize()} data saved successfully!")  
+        df = pd.read_csv(uploaded_file)  
+        # Ensure all required columns exist  
+        for col in columns:  
+            if col not in df.columns:  
+                df[col] = ""  
+        return df  
     except Exception as e:  
-        st.error(f"Error saving {table_name} data: {str(e)}")  
-  
-def load_all_data():  
-    """Load all data from CSV files at startup"""  
-    # Define the tables and their columns  
-    tables = {  
-        "employees": ["employee_id", "first_name", "last_name", "email", "phone", "department", "job_title", "hire_date", "employment_status"],  
-        "meetings": ["meeting_id", "employee_id", "date", "meeting_type", "notes"],  
-        "disciplinary": ["disciplinary_id", "employee_id", "date", "violation_type", "action_taken", "notes"],  
-        "performance": ["performance_id", "employee_id", "date", "rating", "notes"],  
-        "training": ["training_id", "employee_id", "date", "training_type", "completion_status", "notes"],  
-        "activity": ["activity_id", "employee_id", "date", "activity_type", "notes"]  
-    }  
-      
-    # Load each table into session state  
-    for table_name, columns in tables.items():  
-        if table_name not in st.session_state:  
-            st.session_state[table_name] = load_table(table_name, columns)  
-            print(f"Loaded {table_name} data: {len(st.session_state[table_name])} records")  
-  
-def save_all_data():  
-    """Save all data to CSV files"""  
-    tables = ["employees", "meetings", "disciplinary", "performance", "training", "activity"]  
-    for table_name in tables:  
-        if table_name in st.session_state and not st.session_state[table_name].empty:  
-            save_table(table_name, st.session_state[table_name])  
-  
-# Initialize session state for tracking if data is loaded  
-if "data_loaded" not in st.session_state:  
-    st.session_state.data_loaded = False  
-  
-# Load data if not already loaded  
-if not st.session_state.data_loaded:  
-    load_all_data()  
-    st.session_state.data_loaded = True  
-  
-# Add a save button to the sidebar  
-st.sidebar.title("Data Management")  
-if st.sidebar.button("💾 Save All Data"):  
-    save_all_data()  
+        st.error(f"Error loading file: {e}")  
+        return pd.DataFrame({col: [] for col in columns})  
+
 # -------------------------------  
 # 4. Initialize Session State  
 # -------------------------------  
