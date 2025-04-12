@@ -27,9 +27,9 @@ def get_csv_download_link(df, filename, label='Download CSV file'):
     b64 = base64.b64encode(csv.encode()).decode()  
     return f'<a href="data:file/csv;base64,{b64}" download="{filename}">{label}</a>'  
   
-# -------------------------------  
-# 3. Data Persistence Functions  
-# -------------------------------  
+# ----------------------------------------------------------------------  
+# 3. SQLITE DATABASE FUNCTIONS  
+# ----------------------------------------------------------------------  
 def init_sqlite_db():  
     """Initialize SQLite database with required tables."""  
     conn = sqlite3.connect('employee_database.db')  
@@ -104,89 +104,93 @@ def init_sqlite_db():
     conn.close()  
   
 def load_table_from_sqlite(table_name):  
-    """Load data from SQLite into a pandas DataFrame."""  
+    """Load data from a SQLite table into a pandas DataFrame."""  
     conn = sqlite3.connect('employee_database.db')  
+    query = f"SELECT * FROM {table_name}"  
     try:  
-        query = f"SELECT * FROM {table_name}"  
         df = pd.read_sql_query(query, conn)  
-        return df  
     except Exception as e:  
         st.error("Error loading table " + table_name + ": " + str(e))  
-        return pd.DataFrame()  
-    finally:  
-        conn.close()  
+        df = pd.DataFrame()  
+    conn.close()  
+    return df  
   
 def save_table_to_sqlite(table_name, df):  
-    """Save a pandas DataFrame to the SQLite table."""  
+    """Save a pandas DataFrame to a SQLite table."""  
     if df is None or df.empty:  
+        st.warning("No data in " + table_name + " table to save.")  
         return  
     conn = sqlite3.connect('employee_database.db')  
     try:  
         df.to_sql(table_name, conn, if_exists='replace', index=False)  
     except Exception as e:  
         st.error("Error saving table " + table_name + ": " + str(e))  
-    finally:  
-        conn.close()  
+    conn.close()  
   
+# ----------------------------------------------------------------------  
+# 4. SESSION STATE DATA LOADING & SAVING  
+# ----------------------------------------------------------------------  
 def load_all_data():  
-    """Load all data from the SQLite database into session state."""  
+    """Load all data from SQLite into session state."""  
     tables = ["employees", "meetings", "disciplinary", "performance", "training", "activity"]  
-    for tbl in tables:  
-        st.session_state[tbl] = load_table_from_sqlite(tbl)  
-        print("Loaded " + tbl + " data: " + str(len(st.session_state[tbl])) + " records.")  
+    for table_name in tables:  
+        st.session_state[table_name] = load_table_from_sqlite(table_name)  
+        print("Loaded " + table_name + " with " + str(len(st.session_state[table_name])) + " records.")  
   
 def save_all_data():  
-    """Save all data in session state to the SQLite database."""  
+    """Save all data from session state to SQLite."""  
     tables = ["employees", "meetings", "disciplinary", "performance", "training", "activity"]  
-    for tbl in tables:  
-        if tbl in st.session_state and not st.session_state[tbl].empty:  
-            save_table_to_sqlite(tbl, st.session_state[tbl])  
+    for table_name in tables:  
+        # Only save if the table exists in session state and is not empty  
+        if table_name in st.session_state and not st.session_state[table_name].empty:  
+            save_table_to_sqlite(table_name, st.session_state[table_name])  
     st.success("All data saved successfully!")  
   
 # ----------------------------------------------------------------------  
-# 4. HELPER FUNCTION FOR LOADING UPLOADED FILES  
+# 5. FILE UPLOAD SUPPORT  
 # ----------------------------------------------------------------------  
 def load_from_uploaded_file(uploaded_file, columns):  
-    """Load a CSV file from user upload into a DataFrame."""  
-    if uploaded_file is not None:  
-        try:  
-            df = pd.read_csv(uploaded_file)  
-            return df  
-        except Exception as e:  
-            st.error("Error loading uploaded file: " + str(e))  
-            return pd.DataFrame(columns=columns)  
-    else:  
+    """Load a CSV file from an uploaded file and ensure it contains specified columns."""  
+    try:  
+        df = pd.read_csv(uploaded_file)  
+        # Optional: Check if required columns exist; if not, initialize an empty DataFrame  
+        missing_cols = set(columns) - set(df.columns)  
+        if missing_cols:  
+            st.warning("Missing columns in uploaded file: " + ", ".join(missing_cols))  
+            df = pd.DataFrame(columns=columns)  
+        return df  
+    except Exception as e:  
+        st.error("Error loading the uploaded file: " + str(e))  
         return pd.DataFrame(columns=columns)  
   
 # ----------------------------------------------------------------------  
-# 5. INITIALIZE DATABASE AND LOAD DATA  
+# 6. INITIALIZATION & DATA MANAGEMENT UI  
 # ----------------------------------------------------------------------  
+# Initialize the SQLite database  
 init_sqlite_db()  
   
+# Initialize session state marker for data loading  
 if "data_loaded" not in st.session_state:  
     st.session_state.data_loaded = False  
   
+# Load all data if not already loaded  
 if not st.session_state.data_loaded:  
     load_all_data()  
     st.session_state.data_loaded = True  
   
-# ----------------------------------------------------------------------  
-# 6. DATA MANAGEMENT UI  
-# ----------------------------------------------------------------------  
+# Sidebar for data management  
 st.sidebar.title("Data Management")  
 if st.sidebar.button("💾 Save All Data"):  
     save_all_data()  
   
-# Example usage: Upload employees CSV file  
+# Example: Upload Employees CSV file  
 employee_columns = ["employee_id", "first_name", "last_name", "email", "phone", "department", "job_title", "hire_date", "employment_status"]  
 uploaded_employees = st.file_uploader("Upload Employees CSV", type=["csv"])  
 if uploaded_employees is not None:  
     st.session_state.employees = load_from_uploaded_file(uploaded_employees, employee_columns)  
-    st.success("Employees data loaded from uploaded file.")  
+    st.success("Employees data loaded from the uploaded file.")  
   
-# You can add similar blocks for meetings, disciplinary records, etc.  
-  
-# Optionally, show a preview of the data  
+# Optionally, display a preview of the data  
 if "employees" in st.session_state:  
     st.subheader("Employees Data Preview")  
     st.dataframe(st.session_state.employees)  
