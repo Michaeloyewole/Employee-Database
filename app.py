@@ -5,15 +5,10 @@ from datetime import datetime, timedelta
 import sqlite3  
 import uuid  
 import io  
+import base64  
   
-st.set_page_config(  
-    page_title="Employee Overtime & Uncovered Duties Tool",  
-    page_icon="👥",  
-    layout="wide",  
-    initial_sidebar_state="expanded"  
-)  
+st.set_page_config(page_title="Employee Overtime & Uncovered Duties Tool", page_icon="👥", layout="wide")  
   
-# --- Database Functions ---  
 def init_sqlite_db():  
     conn = sqlite3.connect('overtime_database.db')  
     cursor = conn.cursor()  
@@ -51,6 +46,14 @@ def load_data(table_name="overtime"):
         df['date'] = pd.to_datetime(df['date'])  
     return df  
   
+def get_download_link(df, text):  
+    df_copy = df.copy()  
+    if 'date' in df_copy.columns:  
+        df_copy['date'] = df_copy['date'].dt.strftime('%Y-%m-%d')  
+    csv = df_copy.to_csv(index=False)  
+    b64 = base64.b64encode(csv.encode()).decode()  
+    return f'<a href="data:file/csv;base64,{b64}" download="data.csv">{text}</a>'  
+  
 def save_overtime(data):  
     conn = sqlite3.connect('overtime_database.db')  
     cursor = conn.cursor()  
@@ -74,6 +77,9 @@ def save_uncovered_duty(data):
     conn.close()  
   
 def update_overtime_record(data):  
+    if isinstance(data['date'], pd.Timestamp):  
+        data['date'] = data['date'].strftime('%Y-%m-%d')  
+      
     conn = sqlite3.connect('overtime_database.db')  
     cursor = conn.cursor()  
     cursor.execute("""  
@@ -91,6 +97,9 @@ def update_overtime_record(data):
     conn.close()  
   
 def update_duty_record(data):  
+    if isinstance(data['date'], pd.Timestamp):  
+        data['date'] = data['date'].strftime('%Y-%m-%d')  
+      
     conn = sqlite3.connect('overtime_database.db')  
     cursor = conn.cursor()  
     cursor.execute("""  
@@ -106,116 +115,65 @@ def update_duty_record(data):
     conn.commit()  
     conn.close()  
   
-def get_download_link(df, label):  
-    csv = df.to_csv(index=False)  
-    b64 = base64.b64encode(csv.encode()).decode()  
-    href = f'<a href="data:file/csv;base64,{b64}" download="data.csv">{label}</a>'  
-    return href  
-  
-# --- Entry Forms ---  
 def overtime_entry():  
     st.header("Overtime Entry Form")  
     with st.form("overtime_form"):  
-        col1, col2 = st.columns(2)  
-        with col1:  
-            employee_id = st.text_input("Employee ID")  
-            name = st.text_input("Name")  
-            department = st.selectbox(  
-                "Department",  
-                ["Operations", "Engineering", "HR", "Finance", "IT", "Sales"]  
-            )  
-            date = st.date_input("Date")  
-          
-        with col2:  
-            hours = st.number_input("Hours", min_value=0.0, max_value=24.0, step=0.5)  
-            overtime_type = st.selectbox(  
-                "Type",  
-                ["Regular", "Emergency", "Holiday", "Special Project"]  
-            )  
-            approved_by = st.text_input("Approved By")  
-            status = st.selectbox("Status", ["Pending", "Approved", "Rejected"])  
-          
+        employee_id = st.text_input("Employee ID")  
+        name = st.text_input("Name")  
+        department = st.text_input("Department")  
+        date = st.date_input("Date")  
+        hours = st.number_input("Hours", min_value=0.0, step=0.5)  
+        type = st.selectbox("Type", ["Regular", "Emergency", "Holiday"])  
+        approved_by = st.text_input("Approved By")  
+        status = st.selectbox("Status", ["Pending", "Approved", "Rejected"])  
         notes = st.text_area("Notes")  
-        submitted = st.form_submit_button("Submit")  
           
-        if submitted:  
+        if st.form_submit_button("Submit"):  
             overtime_id = str(uuid.uuid4())  
-            data = (  
-                overtime_id, employee_id, name, department,  
-                date.strftime("%Y-%m-%d"), hours, overtime_type,  
-                approved_by, status, notes  
-            )  
+            data = (overtime_id, employee_id, name, department, date.strftime('%Y-%m-%d'),   
+                   hours, type, approved_by, status, notes)  
             save_overtime(data)  
-            st.success("Overtime entry saved successfully!")  
+            st.success("Overtime record saved successfully!")  
   
 def uncovered_duties_entry():  
     st.header("Uncovered Duties Entry Form")  
     with st.form("duties_form"):  
-        col1, col2 = st.columns(2)  
-        with col1:  
-            date = st.date_input("Date")  
-            department = st.selectbox(  
-                "Department",  
-                ["Operations", "Engineering", "HR", "Finance", "IT", "Sales"]  
-            )  
-            shift = st.selectbox("Shift", ["Morning", "Afternoon", "Night"])  
+        date = st.date_input("Date")  
+        department = st.text_input("Department")  
+        shift = st.selectbox("Shift", ["Morning", "Afternoon", "Night"])  
+        hours_uncovered = st.number_input("Hours Uncovered", min_value=0.0, step=0.5)  
+        reason = st.text_area("Reason")  
+        status = st.selectbox("Status", ["Open", "Covered", "Cancelled"])  
           
-        with col2:  
-            hours_uncovered = st.number_input(  
-                "Hours Uncovered",  
-                min_value=0.0,  
-                max_value=24.0,  
-                step=0.5  
-            )  
-            reason = st.text_area("Reason")  
-            status = st.selectbox(  
-                "Status",  
-                ["Open", "Covered", "Cancelled"]  
-            )  
-          
-        submitted = st.form_submit_button("Submit")  
-          
-        if submitted:  
+        if st.form_submit_button("Submit"):  
             duty_id = str(uuid.uuid4())  
-            data = (  
-                duty_id, date.strftime("%Y-%m-%d"),  
-                department, shift, hours_uncovered,  
-                reason, status  
-            )  
+            data = (duty_id, date.strftime('%Y-%m-%d'), department, shift,   
+                   hours_uncovered, reason, status)  
             save_uncovered_duty(data)  
-            st.success("Uncovered duty entry saved successfully!")  
+            st.success("Uncovered duty record saved successfully!")  
   
-# --- Upload Module ---  
 def upload_module():  
     st.header("Upload Data")  
     upload_type = st.radio("Select Upload Type", ["Overtime", "Uncovered Duties"])  
-      
     uploaded_file = st.file_uploader("Choose a CSV file", type="csv")  
+      
     if uploaded_file is not None:  
         try:  
             df = pd.read_csv(uploaded_file)  
-            st.write("Preview of uploaded data:")  
-            st.write(df.head())  
-              
-            if st.button("Confirm Upload"):  
-                if upload_type == "Overtime":  
-                    for _, row in df.iterrows():  
-                        data = (str(uuid.uuid4()), row['employee_id'], row['name'],  
-                               row['department'], row['date'], row['hours'],  
-                               row['type'], row['approved_by'], row['status'],  
-                               row['notes'])  
-                        save_overtime(data)  
-                else:  
-                    for _, row in df.iterrows():  
-                        data = (str(uuid.uuid4()), row['date'], row['department'],  
-                               row['shift'], row['hours_uncovered'], row['reason'],  
-                               row['status'])  
-                        save_uncovered_duty(data)  
-                st.success(f"{upload_type} data uploaded successfully!")  
+            if upload_type == "Overtime":  
+                for _, row in df.iterrows():  
+                    overtime_id = str(uuid.uuid4())  
+                    data = (overtime_id,) + tuple(row)  
+                    save_overtime(data)  
+            else:  
+                for _, row in df.iterrows():  
+                    duty_id = str(uuid.uuid4())  
+                    data = (duty_id,) + tuple(row)  
+                    save_uncovered_duty(data)  
+            st.success(f"{upload_type} data uploaded successfully!")  
         except Exception as e:  
             st.error(f"Error processing file: {e}")  
   
-# --- Reports ---  
 def view_reports():  
     st.header("Reports Dashboard")  
     df_overtime = load_data("overtime")  
@@ -302,14 +260,9 @@ def view_reports():
     st.markdown(get_download_link(edited_overtime, "Download Overtime Data"), unsafe_allow_html=True)  
     st.markdown(get_download_link(edited_duties, "Download Uncovered Duties Data"), unsafe_allow_html=True)  
   
-# --- Main App ---  
 def main():  
-    st.title("Employee Overtime Management System")  
-      
-    page = st.sidebar.radio(  
-        "Navigation",  
-        ["Overtime Entry", "Uncovered Duties Entry", "Upload Data", "Reports"]  
-    )  
+    st.title("Employee Overtime & Uncovered Duties Management System")  
+    page = st.sidebar.radio("Navigation", ["Overtime Entry", "Uncovered Duties Entry", "Upload Data", "Reports"])  
       
     if page == "Overtime Entry":  
         overtime_entry()  
@@ -321,4 +274,5 @@ def main():
         view_reports()  
   
 if __name__ == "__main__":  
+    init_sqlite_db()  
     main()  
