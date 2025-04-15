@@ -88,7 +88,7 @@ def overtime_entry():
             name = st.text_input("Employee Name")  
             department = st.selectbox(  
                 "Department",  
-                ["Operations", "Engineering", "HR", "Finance"]  
+                ["Operations", "OCC", "Training", "Scheduling"]  
             )  
           
         with col2:  
