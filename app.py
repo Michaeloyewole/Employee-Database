@@ -195,5 +195,5 @@ else:
   
 # Footer  
 st.sidebar.markdown("---")  
-st.sidebar.markdown("© 2023 Employee Overtime Management")  
+st.sidebar.markdown("© 2025 Employee Overtime Management")  
 
