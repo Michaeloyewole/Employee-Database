@@ -327,5 +327,5 @@ else:
   
 # Footer  
 st.sidebar.markdown("---")  
-st.sidebar.markdown("© 2023 Employee Management System")  
+st.sidebar.markdown("© 2025 Employee Management System")  
 
