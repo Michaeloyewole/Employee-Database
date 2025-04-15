@@ -5,12 +5,13 @@ import matplotlib.pyplot as plt
 from datetime import datetime, timedelta  
 import base64  
 import sqlite3  
+import uuid  
   
 # -------------------------------  
 # Page Config & Data Directory  
 # -------------------------------  
 st.set_page_config(  
-    page_title="Employee Overtime & Uncovered Duties Tool",  
+    page_title="Employee Overtime Tool",  
     page_icon="👥",  
     layout="wide",  
     initial_sidebar_state="expanded"  
@@ -90,242 +91,180 @@ def save_uncovered_duty(data):
     conn.commit()  
     conn.close()  
   
-def update_record(table, id_field, record_id, field, value):  
-    conn = sqlite3.connect('overtime_database.db')  
-    cursor = conn.cursor()  
-    cursor.execute(f"""  
-    UPDATE {table}  
-    SET {field} = ?  
-    WHERE {id_field} = ?  
-    """, (value, record_id))  
-    conn.commit()  
-    conn.close()  
-  
-def get_download_link(df):  
+def get_download_link(df, label="Download Data"):  
     csv = df.to_csv(index=False)  
-    return st.download_button(  
-        label="Download Data",  
-        data=csv,  
-        file_name="overtime_data.csv",  
-        mime="text/csv"  
-    )  
+    b64 = base64.b64encode(csv.encode()).decode()  
+    href = f'<a href="data:file/csv;base64,{b64}" download="data.csv">{label}</a>'  
+    st.markdown(href, unsafe_allow_html=True)  
   
 # -------------------------------  
-# Page Functions  
+# Overtime Entry Form  
 # -------------------------------  
 def overtime_entry():  
-    st.header("Overtime Entry")  
-      
+    st.header("Overtime Entry Form")  
     with st.form("overtime_form"):  
         col1, col2 = st.columns(2)  
-          
         with col1:  
-            date = st.date_input("Date")  
             employee_id = st.text_input("Employee ID")  
-            name = st.text_input("Employee Name")  
+            name = st.text_input("Name")  
             department = st.selectbox(  
                 "Department",  
-                ["Operations", "OCC", "Training", "Planning"]  
+                ["Operations", "Engineering", "HR", "Finance", "IT", "Sales"]  
             )  
-          
+            date = st.date_input("Date")  
         with col2:  
-            hours = st.number_input("Hours", min_value=0.0, step=0.5)  
+            hours = st.number_input("Hours", min_value=0.0, max_value=24.0, step=0.5)  
             overtime_type = st.selectbox(  
                 "Type",  
-                ["Regular", "Emergency", "Special Project"]  
+                ["Regular", "Emergency", "Holiday", "Special Project"]  
             )  
             approved_by = st.text_input("Approved By")  
             status = st.selectbox("Status", ["Pending", "Approved", "Rejected"])  
-          
         notes = st.text_area("Notes")  
-          
-        if st.form_submit_button("Submit"):  
+        submitted = st.form_submit_button("Submit")  
+        if submitted:  
+            overtime_id = str(uuid.uuid4())  
             data = (  
-                str(datetime.now().timestamp()),  # overtime_id  
-                employee_id,  
-                name,  
-                department,  
-                date.strftime("%Y-%m-%d"),  
-                hours,  
-                overtime_type,  
-                approved_by,  
-                status,  
-                notes  
+                overtime_id, employee_id, name, department,  
+                date.strftime("%Y-%m-%d"), hours, overtime_type,  
+                approved_by, status, notes  
             )  
             save_overtime(data)  
-            st.success("Entry saved successfully!")  
+            st.success("Overtime entry saved successfully!")  
   
+# -------------------------------  
+# Uncovered Duties Entry Form  
+# -------------------------------  
 def uncovered_duties_entry():  
-    st.header("Uncovered Duties Entry")  
-      
-    with st.form("uncovered_duties_form"):  
+    st.header("Uncovered Duties Entry Form")  
+    with st.form("duties_form"):  
         col1, col2 = st.columns(2)  
-          
         with col1:  
             date = st.date_input("Date")  
             department = st.selectbox(  
                 "Department",  
-                ["Operations", "OCC", "Training", "Planning"]  
+                ["Operations", "Engineering", "HR", "Finance", "IT", "Sales"]  
             )  
-            shift = st.selectbox(  
-                "Shift",  
-                ["Early" , "Late"]  
-            )  
-          
+            shift = st.selectbox("Shift", ["Morning", "Afternoon", "Night"])  
         with col2:  
-            hours_uncovered = st.number_input("Hours Uncovered", min_value=0.0, step=0.5)  
-            reason = st.text_input("Reason")  
-            status = st.selectbox("Status", ["Open", "Covered", "Cancelled"])  
-          
-        if st.form_submit_button("Submit"):  
+            hours_uncovered = st.number_input(  
+                "Hours Uncovered",  
+                min_value=0.0,  
+                max_value=24.0,  
+                step=0.5  
+            )  
+            reason = st.text_area("Reason")  
+            status = st.selectbox(  
+                "Status",  
+                ["Open", "Covered", "Cancelled"]  
+            )  
+        submitted = st.form_submit_button("Submit")  
+        if submitted:  
+            duty_id = str(uuid.uuid4())  
             data = (  
-                str(datetime.now().timestamp()),  # duty_id  
-                date.strftime("%Y-%m-%d"),  
-                department,  
-                shift,  
-                hours_uncovered,  
-                reason,  
-                status  
+                duty_id, date.strftime("%Y-%m-%d"),  
+                department, shift, hours_uncovered,  
+                reason, status  
             )  
             save_uncovered_duty(data)  
-            st.success("Entry saved successfully!")  
+            st.success("Uncovered duty entry saved successfully!")  
   
-def upload_data():  
-    st.header("Upload Data")  
-      
-    tab1, tab2 = st.tabs(["Overtime Data", "Uncovered Duties Data"])  
-      
-    with tab1:  
-        uploaded_file = st.file_uploader("Choose Overtime CSV file", type="csv", key="overtime_upload")  
-        if uploaded_file is not None:  
-            df = pd.read_csv(uploaded_file)  
-            if st.button("Import Overtime Data"):  
-                conn = sqlite3.connect('overtime_database.db')  
-                df.to_sql('overtime', conn, if_exists='append', index=False)  
-                conn.close()  
-                st.success("Overtime data imported successfully!")  
-      
-    with tab2:  
-        uploaded_file = st.file_uploader("Choose Uncovered Duties CSV file", type="csv", key="duties_upload")  
-        if uploaded_file is not None:  
-            df = pd.read_csv(uploaded_file)  
-            if st.button("Import Uncovered Duties Data"):  
-                conn = sqlite3.connect('overtime_database.db')  
-                df.to_sql('uncovered_duties', conn, if_exists='append', index=False)  
-                conn.close()  
-                st.success("Uncovered duties data imported successfully!")  
-  
+# -------------------------------  
+# Reports Module  
+# -------------------------------  
 def view_reports():  
-    st.header("Reports")  
-      
-    # Date filter  
+    st.header("Reports Dashboard")  
+    df_overtime = load_data("overtime")  
+    df_duties = load_data("uncovered_duties")  
+    if df_overtime.empty and df_duties.empty:  
+        st.warning("No data available in the database")  
+        return  
+  
+    # Date filters  
     col1, col2 = st.columns(2)  
     with col1:  
         start_date = st.date_input("From Date", datetime.now() - timedelta(days=30))  
     with col2:  
         end_date = st.date_input("To Date", datetime.now())  
-      
+  
     # Department filter  
-    department = st.selectbox(  
-        "Filter by Department",  
-        ["All Departments", "Operations", "Engineering", "HR", "Finance"]  
-    )  
-      
-    # Load and filter data  
-    df_overtime = load_data("overtime")  
-    df_duties = load_data("uncovered_duties")  
-      
+    all_departments = sorted(list(set(  
+        list(df_overtime['department'].dropna().unique()) +   
+        list(df_duties['department'].dropna().unique())  
+    )))  
+    selected_dept = st.selectbox("Select Department", ["All"] + all_departments)  
+  
     # Apply filters  
-    mask_date_ot = (df_overtime['date'].dt.date >= start_date) & (df_overtime['date'].dt.date <= end_date)  
-    mask_date_duties = (pd.to_datetime(df_duties['date']).dt.date >= start_date) & (pd.to_datetime(df_duties['date']).dt.date <= end_date)  
-      
-    df_overtime = df_overtime[mask_date_ot]  
-    df_duties = df_duties[mask_date_duties]  
-      
-    if department != "All Departments":  
-        df_overtime = df_overtime[df_overtime['department'] == department]  
-        df_duties = df_duties[df_duties['department'] == department]  
-      
-    # Display metrics  
-    col1, col2, col3, col4 = st.columns(4)  
+    mask_overtime = (df_overtime['date'].dt.date >= start_date) & (df_overtime['date'].dt.date <= end_date)  
+    mask_duties = (df_duties['date'].dt.date >= start_date) & (df_duties['date'].dt.date <= end_date)  
+    if selected_dept != "All":  
+        mask_overtime &= (df_overtime['department'] == selected_dept)  
+        mask_duties &= (df_duties['department'] == selected_dept)  
+    df_overtime_filtered = df_overtime[mask_overtime]  
+    df_duties_filtered = df_duties[mask_duties]  
+  
+    # Summary metrics  
+    col1, col2, col3 = st.columns(3)  
     with col1:  
-        st.metric("Total Overtime Hours", f"{df_overtime['hours'].sum():.1f}")  
+        st.metric("Total Overtime Hours", f"{df_overtime_filtered['hours'].sum():.1f}")  
     with col2:  
-        st.metric("Total Entries", len(df_overtime))  
+        st.metric("Total Uncovered Hours", f"{df_duties_filtered['hours_uncovered'].sum():.1f}")  
     with col3:  
-        st.metric("Uncovered Hours", f"{df_duties['hours_uncovered'].sum():.1f}")  
-    with col4:  
-        st.metric("Open Uncovered Duties", len(df_duties[df_duties['status'] == 'Open']))  
-      
-    # Charts  
-    st.subheader("Overtime Distribution")  
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))  
-      
-    # Overtime by department  
-    dept_hours = df_overtime.groupby('department')['hours'].sum()  
-    dept_hours.plot(kind='pie', ax=ax1, title='Overtime Hours by Department')  
-      
-    # Uncovered duties by department  
-    duties_hours = df_duties.groupby('department')['hours_uncovered'].sum()  
-    duties_hours.plot(kind='pie', ax=ax2, title='Uncovered Hours by Department')  
-      
-    st.pyplot(fig)  
-      
-    # Data tables with editing capability  
-    st.subheader("Overtime Records")  
-    edited_overtime = st.data_editor(  
-        df_overtime,  
-        num_rows="dynamic",  
-        use_container_width=True,  
-        column_config={  
-            "overtime_id": None,  # Hide ID column  
-            "date": st.column_config.DateColumn("Date"),  
-            "hours": st.column_config.NumberColumn("Hours", min_value=0, max_value=24, step=0.5),  
-            "status": st.column_config.SelectboxColumn("Status", options=["Pending", "Approved", "Rejected"])  
-        }  
-    )  
-      
-    st.subheader("Uncovered Duties Records")  
-    edited_duties = st.data_editor(  
-        df_duties,  
-        num_rows="dynamic",  
-        use_container_width=True,  
-        column_config={  
-            "duty_id": None,  # Hide ID column  
-            "date": st.column_config.DateColumn("Date"),  
-            "hours_uncovered": st.column_config.NumberColumn("Hours", min_value=0, max_value=24, step=0.5),  
-            "status": st.column_config.SelectboxColumn("Status", options=["Open", "Covered", "Cancelled"])  
-        }  
-    )  
-      
-    # Download buttons  
-    col1, col2 = st.columns(2)  
-    with col1:  
-        get_download_link(edited_overtime)  
-    with col2:  
-        get_download_link(edited_duties)  
+        st.metric("Total Records", len(df_overtime_filtered) + len(df_duties_filtered))  
+  
+    # Overtime pie chart  
+    if not df_overtime_filtered.empty and df_overtime_filtered['hours'].notna().any():  
+        overtime_by_dept = df_overtime_filtered.groupby('department')['hours'].sum()  
+        if not overtime_by_dept.empty and overtime_by_dept.sum() > 0:  
+            fig1, ax1 = plt.subplots(figsize=(10, 6))  
+            overtime_by_dept.plot(kind='pie', ax=ax1, autopct='%1.1f%%')  
+            plt.title('Overtime Hours by Department')  
+            st.pyplot(fig1)  
+            plt.close()  
+        else:  
+            st.info("No overtime data to plot for selected filters.")  
+    else:  
+        st.info("No overtime data to plot for selected filters.")  
+  
+    # Uncovered duties pie chart  
+    if not df_duties_filtered.empty and df_duties_filtered['hours_uncovered'].notna().any():  
+        duties_by_dept = df_duties_filtered.groupby('department')['hours_uncovered'].sum()  
+        if not duties_by_dept.empty and duties_by_dept.sum() > 0:  
+            fig2, ax2 = plt.subplots(figsize=(10, 6))  
+            duties_by_dept.plot(kind='pie', ax=ax2, autopct='%1.1f%%')  
+            plt.title('Uncovered Hours by Department')  
+            st.pyplot(fig2)  
+            plt.close()  
+        else:  
+            st.info("No uncovered duties data to plot for selected filters.")  
+    else:  
+        st.info("No uncovered duties data to plot for selected filters.")  
+  
+    # Editable tables  
+    st.subheader("Edit Overtime Records")  
+    st.data_editor(df_overtime_filtered, use_container_width=True, num_rows="dynamic")  
+    st.subheader("Edit Uncovered Duties Records")  
+    st.data_editor(df_duties_filtered, use_container_width=True, num_rows="dynamic")  
+  
+    # Download links  
+    get_download_link(df_overtime_filtered, label="Download Filtered Overtime Data")  
+    get_download_link(df_duties_filtered, label="Download Filtered Uncovered Duties Data")  
   
 # -------------------------------  
 # Main App  
 # -------------------------------  
-st.title("Employee Overtime & Uncovered Duties Management System")  
-  
-# Sidebar navigation  
+st.title("Employee Overtime Management System")  
 page = st.sidebar.radio(  
     "Navigation",  
-    ["Overtime Entry", "Uncovered Duties Entry", "Upload Data", "Reports"]  
+    ["Overtime Entry", "Uncovered Duties Entry", "Reports"]  
 )  
-  
 if page == "Overtime Entry":  
     overtime_entry()  
 elif page == "Uncovered Duties Entry":  
     uncovered_duties_entry()  
-elif page == "Upload Data":  
-    upload_data()  
 else:  
     view_reports()  
-  
+
 # Footer  
 st.sidebar.markdown("---")  
 st.sidebar.markdown("© 2025 Employee Management System")  
-
