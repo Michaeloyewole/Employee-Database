@@ -14,10 +14,21 @@ st.set_page_config(
     initial_sidebar_state="expanded"  
 )  
   
-# Database initialization  
+# Database initialization with schema update  
 def init_sqlite_db():  
     conn = sqlite3.connect('overtime_database.db')  
     cursor = conn.cursor()  
+      
+    # First, check if we need to migrate the 'type' column to 'depot'  
+    try:  
+        cursor.execute("SELECT type FROM overtime LIMIT 1")  
+        # If the above succeeds, we need to migrate  
+        cursor.execute("ALTER TABLE overtime RENAME COLUMN type TO depot")  
+        conn.commit()  
+    except sqlite3.OperationalError:  
+        # Either the table doesn't exist or the migration is already done  
+        pass  
+      
     cursor.execute("""  
     CREATE TABLE IF NOT EXISTS overtime (  
         overtime_id TEXT PRIMARY KEY,  
@@ -31,6 +42,7 @@ def init_sqlite_db():
         status TEXT,  
         notes TEXT  
     )""")  
+      
     cursor.execute("""  
     CREATE TABLE IF NOT EXISTS uncovered_duties (  
         duty_id TEXT PRIMARY KEY,  
@@ -50,7 +62,84 @@ def load_data(table_name="overtime"):
     conn.close()  
     if 'date' in df.columns:  
         df['date'] = pd.to_datetime(df['date'])  
+    # Ensure depot column exists  
+    if table_name == "overtime" and 'depot' not in df.columns:  
+        df['depot'] = "West"  # Default value  
     return df  
+  
+def get_download_link(df, text):  
+    csv = df.to_csv(index=False)  
+    b64 = base64.b64encode(csv.encode()).decode()  
+    href = f'<a href="data:file/csv;base64,{b64}" download="data.csv">{text}</a>'  
+    return href  
+  
+def overtime_entry():  
+    st.header("Overtime Entry Form")  
+      
+    # Create two columns for side-by-side layout  
+    col1, col2 = st.columns(2)  
+      
+    with col1:  
+        with st.form("overtime_form_left"):  
+            employee_id = st.text_input("Employee ID")  
+            name = st.text_input("Name")  
+            department = st.text_input("Department")  
+            depot = st.selectbox("Depot", ["West", "East"])  
+            date = st.date_input("Date")  
+              
+            if st.form_submit_button("Submit Left Form"):  
+                overtime_id = str(uuid.uuid4())  
+                data = (overtime_id, employee_id, name, department,   
+                       date.strftime('%Y-%m-%d'), 0, depot,  # hours will be set in right form  
+                       "", "Pending", "")  # default values  
+                save_overtime(data)  
+                st.success("Left form data saved!")  
+      
+    with col2:  
+        with st.form("overtime_form_right"):  
+            hours = st.number_input("Hours", min_value=0.0, step=0.5)  
+            approved_by = st.text_input("Approved By")  
+            status = st.selectbox("Status", ["Pending", "Approved", "Rejected"])  
+            notes = st.text_area("Notes")  
+              
+            if st.form_submit_button("Submit Right Form"):  
+                overtime_id = str(uuid.uuid4())  
+                data = (overtime_id, employee_id, name, department,   
+                       date.strftime('%Y-%m-%d'), hours, depot,  
+                       approved_by, status, notes)  
+                save_overtime(data)  
+                st.success("Right form data saved!")  
+  
+def uncovered_duties_entry():  
+    st.header("Uncovered Duties Entry Form")  
+      
+    col1, col2 = st.columns(2)  
+      
+    with col1:  
+        with st.form("duties_form_left"):  
+            date = st.date_input("Date")  
+            department = st.text_input("Department")  
+            shift = st.selectbox("Shift", ["Morning", "Afternoon", "Night"])  
+              
+            if st.form_submit_button("Submit Left Form"):  
+                duty_id = str(uuid.uuid4())  
+                data = (duty_id, date.strftime('%Y-%m-%d'), department, shift,  
+                       0, "", "Pending")  # default values  
+                save_uncovered_duty(data)  
+                st.success("Left form data saved!")  
+      
+    with col2:  
+        with st.form("duties_form_right"):  
+            hours_uncovered = st.number_input("Hours Uncovered", min_value=0.0, step=0.5)  
+            reason = st.text_area("Reason")  
+            status = st.selectbox("Status", ["Open", "Covered", "Cancelled"])  
+              
+            if st.form_submit_button("Submit Right Form"):  
+                duty_id = str(uuid.uuid4())  
+                data = (duty_id, date.strftime('%Y-%m-%d'), department, shift,  
+                       hours_uncovered, reason, status)  
+                save_uncovered_duty(data)  
+                st.success("Right form data saved!")  
   
 def save_overtime(data):  
     conn = sqlite3.connect('overtime_database.db')  
@@ -74,88 +163,6 @@ def save_uncovered_duty(data):
     conn.commit()  
     conn.close()  
   
-def get_download_link(df, text):  
-    """Generate a download link for a DataFrame"""  
-    csv = df.to_csv(index=False)  
-    b64 = base64.b64encode(csv.encode()).decode()  
-    href = f'<a href="data:file/csv;base64,{b64}" download="data.csv">{text}</a>'  
-    return href  
-  
-def overtime_entry():  
-    st.header("Overtime Entry Form")  
-      
-    # Create two columns for side-by-side layout  
-    col1, col2 = st.columns(2)  
-      
-    # Shared variables for both forms  
-    shared_data = {}  
-      
-    with col1:  
-        with st.form("overtime_form_left"):  
-            shared_data['employee_id'] = st.text_input("Employee ID")  
-            shared_data['name'] = st.text_input("Name")  
-            shared_data['department'] = st.text_input("Department")  
-            shared_data['depot'] = st.selectbox("Depot", ["West", "East"])  
-            shared_data['date'] = st.date_input("Date")  
-              
-            if st.form_submit_button("Submit Left Form"):  
-                overtime_id = str(uuid.uuid4())  
-                data = (overtime_id, shared_data['employee_id'], shared_data['name'],   
-                       shared_data['department'], shared_data['date'].strftime('%Y-%m-%d'),   
-                       shared_data.get('hours', 0), shared_data['depot'],  
-                       shared_data.get('approved_by', ''), shared_data.get('status', 'Pending'),   
-                       shared_data.get('notes', ''))  
-                save_overtime(data)  
-                st.success("Overtime record saved successfully!")  
-      
-    with col2:  
-        with st.form("overtime_form_right"):  
-            shared_data['hours'] = st.number_input("Hours", min_value=0.0, step=0.5)  
-            shared_data['approved_by'] = st.text_input("Approved By")  
-            shared_data['status'] = st.selectbox("Status", ["Pending", "Approved", "Rejected"])  
-            shared_data['notes'] = st.text_area("Notes")  
-              
-            if st.form_submit_button("Submit Right Form"):  
-                overtime_id = str(uuid.uuid4())  
-                data = (overtime_id, shared_data['employee_id'], shared_data['name'],   
-                       shared_data['department'], shared_data['date'].strftime('%Y-%m-%d'),   
-                       shared_data['hours'], shared_data['depot'],  
-                       shared_data['approved_by'], shared_data['status'],   
-                       shared_data['notes'])  
-                save_overtime(data)  
-                st.success("Overtime record saved successfully!")  
-  
-def uncovered_duties_entry():  
-    st.header("Uncovered Duties Entry Form")  
-      
-    col1, col2 = st.columns(2)  
-      
-    with col1:  
-        with st.form("duties_form_left"):  
-            date = st.date_input("Date")  
-            department = st.text_input("Department")  
-            shift = st.selectbox("Shift", ["Morning", "Afternoon", "Night"])  
-              
-            if st.form_submit_button("Submit Left Form"):  
-                duty_id = str(uuid.uuid4())  
-                data = (duty_id, date.strftime('%Y-%m-%d'), department, shift,  
-                       hours_uncovered, reason, status)  
-                save_uncovered_duty(data)  
-                st.success("Uncovered duty record saved successfully!")  
-      
-    with col2:  
-        with st.form("duties_form_right"):  
-            hours_uncovered = st.number_input("Hours Uncovered", min_value=0.0, step=0.5)  
-            reason = st.text_area("Reason")  
-            status = st.selectbox("Status", ["Open", "Covered", "Cancelled"])  
-              
-            if st.form_submit_button("Submit Right Form"):  
-                duty_id = str(uuid.uuid4())  
-                data = (duty_id, date.strftime('%Y-%m-%d'), department, shift,  
-                       hours_uncovered, reason, status)  
-                save_uncovered_duty(data)  
-                st.success("Uncovered duty record saved successfully!")  
-  
 def view_reports():  
     st.header("Reports Dashboard")  
     df_overtime = load_data("overtime")  
@@ -173,7 +180,7 @@ def view_reports():
     with col2:  
         end_date = st.date_input("To Date", datetime.now())  
     with col3:  
-        depot_options = ["Both"] + sorted(df_overtime['depot'].dropna().unique().tolist())  
+        depot_options = ["Both"] + sorted(df_overtime['depot'].unique().tolist())  
         selected_depot = st.selectbox("Depot", depot_options)  
   
     # Apply filters  
@@ -198,38 +205,36 @@ def view_reports():
     # Visualizations  
     if not df_overtime_filtered.empty:  
         # Overtime by Depot Pie Chart  
-        st.subheader("Overtime Distribution by Depot")  
-        overtime_by_depot = df_overtime_filtered.groupby('depot')['hours'].sum()  
-          
-        fig1, ax1 = plt.subplots(figsize=(10, 6))  
-        plt.style.use('default')  
-        colors = ['#2563EB', '#24EB84']  
-        overtime_by_depot.plot(kind='pie', autopct='%1.1f%%', colors=colors, ax=ax1)  
-        plt.title('Overtime Hours by Depot', pad=15, fontsize=14)  
-        plt.ylabel('')  
+        fig1, ax1 = plt.subplots(figsize=(8, 6))  
+        depot_data = df_overtime_filtered.groupby('depot')['hours'].sum()  
+        depot_data.plot(kind='pie', autopct='%1.1f%%', ax=ax1)  
+        plt.title('Overtime Hours by Depot')  
         st.pyplot(fig1)  
         plt.close()  
   
         # Overtime by Department and Depot  
-        st.subheader("Overtime by Department and Depot")  
-        overtime_by_dept_depot = df_overtime_filtered.groupby(['depot', 'department'])['hours'].sum().unstack()  
-          
         fig2, ax2 = plt.subplots(figsize=(12, 6))  
-        overtime_by_dept_depot.plot(kind='bar', ax=ax2)  
-        plt.title('Overtime Hours by Department and Depot', pad=15, fontsize=14)  
-        plt.xlabel('Depot', labelpad=10)  
-        plt.ylabel('Hours', labelpad=10)  
+        dept_depot_data = df_overtime_filtered.pivot_table(  
+            values='hours',  
+            index='department',  
+            columns='depot',  
+            aggfunc='sum',  
+            fill_value=0  
+        )  
+        dept_depot_data.plot(kind='bar', ax=ax2)  
+        plt.title('Overtime Hours by Department and Depot')  
+        plt.xlabel('Department')  
+        plt.ylabel('Hours')  
         plt.xticks(rotation=45)  
-        plt.legend(title='Department', bbox_to_anchor=(1.05, 1), loc='upper left')  
-        plt.tight_layout()  
+        plt.legend(title='Depot')  
         st.pyplot(fig2)  
         plt.close()  
   
-    # Data Tables  
-    st.subheader("Overtime Records")  
+    # Display filtered data  
+    st.subheader("Filtered Overtime Records")  
     st.dataframe(df_overtime_filtered)  
       
-    st.subheader("Uncovered Duties Records")  
+    st.subheader("Filtered Uncovered Duties Records")  
     st.dataframe(df_duties_filtered)  
   
     # Download buttons  
@@ -284,4 +289,3 @@ def main():
 if __name__ == "__main__":  
     init_sqlite_db()  
     main()  
-
