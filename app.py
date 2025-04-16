@@ -53,116 +53,86 @@ def insert_entry(entry):
   
 def fetch_entries(department=None):  
     conn = sqlite3.connect(DB_NAME)  
-    query = f"SELECT * FROM {TABLE_NAME}"  
-    if department:  
-        query += " WHERE department = ?"  
-        df = pd.read_sql_query(query, conn, params=(department,))  
-    else:  
-        df = pd.read_sql_query(query, conn)  
+    df = pd.read_sql_query(  
+        f"SELECT * FROM {TABLE_NAME}" + (f" WHERE department = ?" if department else ""),  
+        conn, params=(department,) if department else ()  
+    )  
     conn.close()  
-    df.rename(columns={"discrepancy_comments": "Discrepancy/Comments", "reviewed_by": "Reviewed By", "audit_status": "Audit Status"}, inplace=True)  
     return df  
   
-def import_data(file):  
-    df = pd.read_csv(file)  
+def import_data(uploaded_file):  
+    df = pd.read_csv(uploaded_file)  
     conn = sqlite3.connect(DB_NAME)  
-    df.to_sql(TABLE_NAME, conn, if_exists='append', index=False)  
-    conn.close()  
-  
-def export_data():  
-    df = fetch_entries()  
-    return df  
-  
-def update_audit_status(entry_id, new_status):  
-    conn = sqlite3.connect(DB_NAME)  
-    c = conn.cursor()  
-    c.execute(f"UPDATE {TABLE_NAME} SET audit_status = ? WHERE entry_id = ?", (new_status, entry_id))  
-    conn.commit()  
+    df.to_sql(TABLE_NAME, conn, if_exists="append", index=False)  
     conn.close()  
   
 # --- TWO-PAGE FORM ---  
-def entry_form(department=None):  
-    st.subheader("Add Overtime Entry")  
-    if "form_page" not in st.session_state:  
-        st.session_state["form_page"] = 1  
-        st.session_state["form_data"] = {}  
-  
-    if st.session_state["form_page"] == 1:  
-        with st.form("form_page1", clear_on_submit=False):  
-            date = st.date_input("Date", value=datetime.today())  
-            week_start = st.date_input("Week Start", value=datetime.today())  
-            week_end = st.date_input("Week End", value=datetime.today())  
-            employee_id = st.text_input("Employee ID")  
-            name = st.text_input("Name")  
-            dept = department or st.selectbox("Department", ["Planning", "Ops", "OCC", "Training"])  
+def entry_form(department):  
+    st.subheader("Add Overtime Entry for " + department)  
+    # Use department in form keys to ensure uniqueness  
+    with st.form("form_page1_" + department, clear_on_submit=False):  
+        date = st.date_input("Date")  
+        week_start = st.date_input("Week Start")  
+        week_end = st.date_input("Week End")  
+        employee_id = st.text_input("Employee ID")  
+        name = st.text_input("Name")  
+        next_page = st.form_submit_button("Next")  
+    if next_page:  
+        st.session_state["form1_data_" + department] = {  
+            "date": str(date),  
+            "week_start": str(week_start),  
+            "week_end": str(week_end),  
+            "employee_id": employee_id,  
+            "name": name  
+        }  
+        st.session_state["show_page2_" + department] = True  
+    if st.session_state.get("show_page2_" + department, False):  
+        with st.form("form_page2_" + department, clear_on_submit=False):  
             roster_group = st.text_input("Roster Group")  
-            next1 = st.form_submit_button("Next")  
-            if next1:  
-                st.session_state["form_data"].update({  
-                    "date": str(date),  
-                    "week_start": str(week_start),  
-                    "week_end": str(week_end),  
-                    "employee_id": employee_id,  
-                    "name": name,  
-                    "department": dept,  
-                    "roster_group": roster_group  
-                })  
-                st.session_state["form_page"] = 2  
-                st.experimental_rerun()  
-    elif st.session_state["form_page"] == 2:  
-        with st.form("form_page2", clear_on_submit=False):  
-            overtime_type = st.text_input("Overtime Type")  
-            hours = st.number_input("Hours", min_value=0.0, step=0.5)  
+            overtime_type = st.selectbox("Overtime Type", ["Planned", "Unplanned"])   
+            hours = st.number_input("Hours", min_value=0.0, step=0.25)  
             depot = st.text_input("Depot")  
             notes = st.text_area("Notes")  
             reviewed_by = st.text_input("Reviewed By")  
-            audit_status = st.selectbox("Audit Status", ["", "Pending", "Approved", "Rejected"])  
-            discrepancy_comments = st.text_area("Discrepancy/Comments")  
-            submit2 = st.form_submit_button("Submit")  
-            back = st.form_submit_button("Back")  
-            if back:  
-                st.session_state["form_page"] = 1  
-                st.experimental_rerun()  
-            if submit2:  
-                st.session_state["form_data"].update({  
-                    "overtime_type": overtime_type,  
-                    "hours": hours,  
-                    "depot": depot,  
-                    "notes": notes,  
-                    "reviewed_by": reviewed_by,  
-                    "audit_status": audit_status,  
-                    "discrepancy_comments": discrepancy_comments  
-                })  
-                insert_entry(st.session_state["form_data"])  
-                st.success("Entry added!")  
-                st.session_state["form_page"] = 1  
-                st.session_state["form_data"] = {}  
-                st.experimental_rerun()  
+            audit_status = st.selectbox("Audit Status", ["Pending", "Approved", "Rejected"])   
+            discrepancy_comments = st.text_area("Discrepancy Comments")  
+            submit = st.form_submit_button("Submit")  
+        if submit:  
+            entry = st.session_state["form1_data_" + department]  
+            entry.update({  
+                "department": department,  
+                "roster_group": roster_group,  
+                "overtime_type": overtime_type,  
+                "hours": hours,  
+                "depot": depot,  
+                "notes": notes,  
+                "reviewed_by": reviewed_by,  
+                "audit_status": audit_status,  
+                "discrepancy_comments": discrepancy_comments  
+            })  
+            insert_entry(entry)  
+            st.success("Entry added!")  
+            st.session_state["show_page2_" + department] = False  
   
 # --- DEPARTMENT TAB ---  
 def department_tab(dept):  
-    st.subheader(dept + " Overtime Entries")  
+    st.header(dept + " Department")  
+    entry_form(dept)  
+    st.write("### Recent Entries")  
     df = fetch_entries(dept)  
-    st.dataframe(df.head(20))  
-    st.markdown("---")  
-    st.write("Add new entry for " + dept)  
-    entry_form(department=dept)  
+    if not df.empty:  
+        st.dataframe(df.tail(10))  
+    else:  
+        st.info("No entries yet for this department.")  
   
 # --- SUMMARY TAB ---  
 def summary_tab():  
-    st.subheader("Summary Dashboard")  
+    st.header("Summary")  
     df = fetch_entries()  
-    st.dataframe(df.head(20))  
     if not df.empty:  
-        st.bar_chart(df.groupby("department")["hours"].sum())  
-        st.line_chart(df.groupby("date")["hours"].sum())  
-    # Optionally, allow audit status update  
-    st.markdown("#### Update Audit Status")  
-    entry_id = st.number_input("Entry ID to update", min_value=1, step=1)  
-    new_status = st.selectbox("New Audit Status", ["Pending", "Approved", "Rejected"])  
-    if st.button("Update Status"):  
-        update_audit_status(entry_id, new_status)  
-        st.success("Audit status updated.")  
+        st.dataframe(df.tail(20))  
+    else:  
+        st.info("No entries yet.")  
   
 # --- REPORT MODULE ---  
 def report_tab():  
@@ -174,11 +144,13 @@ def report_tab():
     st.write("**Total Overtime Hours by Department**")  
     st.bar_chart(df.groupby("department")["hours"].sum())  
     st.write("**Overtime Hours Trend**")  
-    st.line_chart(df.groupby("date")["hours"].sum())  
+    df['date'] = pd.to_datetime(df['date'], errors='coerce')  
+    trend = df.groupby("date")["hours"].sum().sort_index()  
+    st.line_chart(trend)  
     st.write("**Audit Status Distribution**")  
-    st.dataframe(df["Audit Status"].value_counts())  
+    st.dataframe(df["audit_status"].value_counts())  
     st.write("**Department & Audit Status Pivot Table**")  
-    pivot = pd.pivot_table(df, values="hours", index="department", columns="Audit Status", aggfunc="sum", fill_value=0)  
+    pivot = pd.pivot_table(df, values="hours", index="department", columns="audit_status", aggfunc="sum", fill_value=0)  
     st.dataframe(pivot)  
   
 # --- IMPORT/EXPORT MODULE ---  
