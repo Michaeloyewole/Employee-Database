@@ -60,41 +60,55 @@ def fetch_entries(department=None):
     conn.close()  
     return df  
   
+def update_audit_status(entry_id, new_status):  
+    conn = sqlite3.connect(DB_NAME)  
+    c = conn.cursor()  
+    c.execute(f"UPDATE {TABLE_NAME} SET audit_status = ? WHERE entry_id = ?", (new_status, entry_id))  
+    conn.commit()  
+    conn.close()  
+  
 def import_data(uploaded_file):  
     df = pd.read_csv(uploaded_file)  
     conn = sqlite3.connect(DB_NAME)  
-    df.to_sql(TABLE_NAME, conn, if_exists="append", index=False)  
+    df.to_sql(TABLE_NAME, conn, if_exists='append', index=False)  
     conn.close()  
   
-# --- TWO-PAGE FORM ---  
+# --- TWO-PAGE FORM WITH UNIQUE KEYS ---  
 def entry_form(department):  
     st.subheader("Add Overtime Entry for " + department)  
-    # Use department in form keys to ensure uniqueness  
-    with st.form("form_page1_" + department, clear_on_submit=False):  
-        date = st.date_input("Date")  
-        week_start = st.date_input("Week Start")  
-        week_end = st.date_input("Week End")  
-        employee_id = st.text_input("Employee ID")  
-        name = st.text_input("Name")  
-        next_page = st.form_submit_button("Next")  
-    if next_page:  
-        st.session_state["form1_data_" + department] = {  
-            "date": str(date),  
-            "week_start": str(week_start),  
-            "week_end": str(week_end),  
-            "employee_id": employee_id,  
-            "name": name  
-        }  
-        st.session_state["show_page2_" + department] = True  
-    if st.session_state.get("show_page2_" + department, False):  
-        with st.form("form_page2_" + department, clear_on_submit=False):  
+    form1_key = "form_page1_" + department  
+    form2_key = "form_page2_" + department  
+  
+    if "show_page2_" + department not in st.session_state:  
+        st.session_state["show_page2_" + department] = False  
+  
+    if not st.session_state["show_page2_" + department]:  
+        with st.form(form1_key, clear_on_submit=False):  
+            date = st.date_input("Date")  
+            week_start = st.date_input("Week Start")  
+            week_end = st.date_input("Week End")  
+            employee_id = st.text_input("Employee ID")  
+            name = st.text_input("Name")  
+            next_page = st.form_submit_button("Next")  
+        if next_page:  
+            st.session_state["form1_data_" + department] = {  
+                "date": str(date),  
+                "week_start": str(week_start),  
+                "week_end": str(week_end),  
+                "employee_id": employee_id,  
+                "name": name  
+            }  
+            st.session_state["show_page2_" + department] = True  
+  
+    if st.session_state["show_page2_" + department]:  
+        with st.form(form2_key, clear_on_submit=False):  
             roster_group = st.text_input("Roster Group")  
-            overtime_type = st.selectbox("Overtime Type", ["Planned", "Unplanned"])   
+            overtime_type = st.selectbox("Overtime Type", ["Planned", "Unplanned"])  
             hours = st.number_input("Hours", min_value=0.0, step=0.25)  
             depot = st.text_input("Depot")  
             notes = st.text_area("Notes")  
             reviewed_by = st.text_input("Reviewed By")  
-            audit_status = st.selectbox("Audit Status", ["Pending", "Approved", "Rejected"])   
+            audit_status = st.selectbox("Audit Status", ["Pending", "Approved", "Rejected"])  
             discrepancy_comments = st.text_area("Discrepancy Comments")  
             submit = st.form_submit_button("Submit")  
         if submit:  
@@ -116,14 +130,11 @@ def entry_form(department):
   
 # --- DEPARTMENT TAB ---  
 def department_tab(dept):  
-    st.header(dept + " Department")  
-    entry_form(dept)  
-    st.write("### Recent Entries")  
+    st.subheader(dept + " Overtime Entries")  
     df = fetch_entries(dept)  
-    if not df.empty:  
-        st.dataframe(df.tail(10))  
-    else:  
-        st.info("No entries yet for this department.")  
+    st.dataframe(df.tail(20))  
+    st.markdown("---")  
+    entry_form(dept)  
   
 # --- SUMMARY TAB ---  
 def summary_tab():  
