@@ -208,7 +208,7 @@ def import_export_tab():
   
 # --- MAIN APP ---  
 init_db()  
-st.title("Employee Overtime & Uncovered Duties Tool")  
+st.title("Employee Overtime Tool")  
 tabs = st.tabs(["Summary", "Planning", "Ops", "OCC", "Training", "Reports", "Import/Export"])  
   
 with tabs[0]:  
