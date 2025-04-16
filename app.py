@@ -1,364 +1,151 @@
-import os  
 import streamlit as st  
 import pandas as pd  
-import matplotlib.pyplot as plt  
-from datetime import datetime, timedelta  
-import base64  
 import sqlite3  
+from datetime import datetime  
   
-# -------------------------------  
-# Page Config & Data Directory  
-# -------------------------------  
-st.set_page_config(  
-    page_title="Employee Overtime & Uncovered Duties Tool",  
-    page_icon="👥",  
-    layout="wide",  
-    initial_sidebar_state="expanded"  
-)  
+# --- CONFIGURATION ---  
+st.set_page_config(page_title="Overtime Management App", page_icon="🕒", layout="wide")  
   
-# -------------------------------  
-# SQLite Database Initialization  
-# -------------------------------  
-def init_sqlite_db():  
-    conn = sqlite3.connect('overtime_database.db')  
-    cursor = conn.cursor()  
-      
-    # Overtime table  
-    cursor.execute("""  
-    CREATE TABLE IF NOT EXISTS overtime (  
-        overtime_id TEXT PRIMARY KEY,  
-        employee_id TEXT,  
-        name TEXT,  
-        department TEXT,  
-        date TEXT,  
-        hours REAL,  
-        type TEXT,  
-        approved_by TEXT,  
-        status TEXT,  
-        notes TEXT  
-    )  
+DB_NAME = "overtime_app.db"  
+TABLE_NAME = "overtime_entries"  
+  
+# --- DATABASE FUNCTIONS ---  
+def init_db():  
+    conn = sqlite3.connect(DB_NAME)  
+    c = conn.cursor()  
+    c.execute(f"""  
+        CREATE TABLE IF NOT EXISTS {TABLE_NAME} (  
+            entry_id INTEGER PRIMARY KEY AUTOINCREMENT,  
+            date TEXT,  
+            week_start TEXT,  
+            week_end TEXT,  
+            employee_id TEXT,  
+            name TEXT,  
+            department TEXT,  
+            roster_group TEXT,  
+            overtime_type TEXT,  
+            hours REAL,  
+            depot TEXT,  
+            notes TEXT,  
+            reviewed_by TEXT,  
+            audit_status TEXT,  
+            discrepancy_comments TEXT  
+        )  
     """)  
-      
-    # Uncovered duties table  
-    cursor.execute("""  
-    CREATE TABLE IF NOT EXISTS uncovered_duties (  
-        duty_id TEXT PRIMARY KEY,  
-        date TEXT,  
-        department TEXT,  
-        shift TEXT,  
-        hours_uncovered REAL,  
-        reason TEXT,  
-        status TEXT  
-    )  
-    """)  
-      
     conn.commit()  
     conn.close()  
   
-init_sqlite_db()  
-  
-# -------------------------------  
-# Helper Functions  
-# -------------------------------  
-def load_data(table_name="overtime"):  
-    conn = sqlite3.connect('overtime_database.db')  
-    df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)  
-    conn.close()  
-    if 'date' in df.columns:  
-        df['date'] = pd.to_datetime(df['date'])  
-    return df  
-  
-def save_overtime(data):  
-    conn = sqlite3.connect('overtime_database.db')  
-    cursor = conn.cursor()  
-    cursor.execute("""  
-    INSERT INTO overtime   
-    (overtime_id, employee_id, name, department, date, hours, type, approved_by, status, notes)  
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)  
-    """, data)  
+def insert_entry(entry):  
+    conn = sqlite3.connect(DB_NAME)  
+    c = conn.cursor()  
+    c.execute(f"""  
+        INSERT INTO {TABLE_NAME} (  
+            date, week_start, week_end, employee_id, name, department, roster_group,  
+            overtime_type, hours, depot, notes, reviewed_by, audit_status, discrepancy_comments  
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)  
+    """, (  
+        entry['date'], entry['week_start'], entry['week_end'], entry['employee_id'], entry['name'],  
+        entry['department'], entry['roster_group'], entry['overtime_type'], entry['hours'],  
+        entry['depot'], entry['notes'], entry['reviewed_by'], entry['audit_status'], entry['discrepancy_comments']  
+    ))  
     conn.commit()  
     conn.close()  
   
-def save_uncovered_duty(data):  
-    conn = sqlite3.connect('overtime_database.db')  
-    cursor = conn.cursor()  
-    cursor.execute("""  
-    INSERT INTO uncovered_duties   
-    (duty_id, date, department, shift, hours_uncovered, reason, status)  
-    VALUES (?, ?, ?, ?, ?, ?, ?)  
-    """, data)  
-    conn.commit()  
-    conn.close()  
-  
-def update_record(table, id_field, record_id, field, value):  
-    conn = sqlite3.connect('overtime_database.db')  
-    cursor = conn.cursor()  
-    cursor.execute(f"""  
-    UPDATE {table}  
-    SET {field} = ?  
-    WHERE {id_field} = ?  
-    """, (value, record_id))  
-    conn.commit()  
-    conn.close()  
-  
-def get_download_link(df):  
-    csv = df.to_csv(index=False)  
-    return st.download_button(  
-        label="Download Data",  
-        data=csv,  
-        file_name="overtime_data.csv",  
-        mime="text/csv"  
-    )  
-  
-# -------------------------------  
-# Page Functions  
-# -------------------------------  
-def overtime_entry():  
-    st.header("Overtime Entry")  
-      
-    with st.form("overtime_form"):  
-        col1, col2 = st.columns(2)  
-          
-        with col1:  
-            date = st.date_input("Date")  
-            employee_id = st.text_input("Employee ID")  
-            name = st.text_input("Employee Name")  
-            department = st.selectbox(  
-                "Department",  
-                ["Operations", "OCC", "Training", "Planning"]  
-            )  
-          
-        with col2:  
-            hours = st.number_input("Hours", min_value=0.0, step=0.5)  
-            overtime_type = st.selectbox(  
-                "Type",  
-                ["Regular", "Emergency", "Special Project"]  
-            )  
-            approved_by = st.text_input("Approved By")  
-            status = st.selectbox("Status", ["Pending", "Approved", "Rejected"])  
-          
-        notes = st.text_area("Notes")  
-          
-        if st.form_submit_button("Submit"):  
-            data = (  
-                str(datetime.now().timestamp()),  # overtime_id  
-                employee_id,  
-                name,  
-                department,  
-                date.strftime("%Y-%m-%d"),  
-                hours,  
-                overtime_type,  
-                approved_by,  
-                status,  
-                notes  
-            )  
-            save_overtime(data)  
-            st.success("Entry saved successfully!")  
-  
-def uncovered_duties_entry():  
-    st.header("Uncovered Duties Entry")  
-      
-    with st.form("uncovered_duties_form"):  
-        col1, col2 = st.columns(2)  
-          
-        with col1:  
-            date = st.date_input("Date")  
-            department = st.selectbox(  
-                "Department",  
-                ["Operations", "OCC", "Training", "Planning"]  
-            )  
-            shift = st.selectbox(  
-                "Shift",  
-                ["Early" , "Late"]  
-            )  
-          
-        with col2:  
-            hours_uncovered = st.number_input("Hours Uncovered", min_value=0.0, step=0.5)  
-            reason = st.text_input("Reason")  
-            status = st.selectbox("Status", ["Open", "Covered", "Cancelled"])  
-          
-        if st.form_submit_button("Submit"):  
-            data = (  
-                str(datetime.now().timestamp()),  # duty_id  
-                date.strftime("%Y-%m-%d"),  
-                department,  
-                shift,  
-                hours_uncovered,  
-                reason,  
-                status  
-            )  
-            save_uncovered_duty(data)  
-            st.success("Entry saved successfully!")  
-  
-def upload_data():  
-    st.header("Upload Data")  
-      
-    tab1, tab2 = st.tabs(["Overtime Data", "Uncovered Duties Data"])  
-      
-    with tab1:  
-        uploaded_file = st.file_uploader("Choose Overtime CSV file", type="csv", key="overtime_upload")  
-        if uploaded_file is not None:  
-            df = pd.read_csv(uploaded_file)  
-            if st.button("Import Overtime Data"):  
-                conn = sqlite3.connect('overtime_database.db')  
-                df.to_sql('overtime', conn, if_exists='append', index=False)  
-                conn.close()  
-                st.success("Overtime data imported successfully!")  
-      
-    with tab2:  
-        uploaded_file = st.file_uploader("Choose Uncovered Duties CSV file", type="csv", key="duties_upload")  
-        if uploaded_file is not None:  
-            df = pd.read_csv(uploaded_file)  
-            if st.button("Import Uncovered Duties Data"):  
-                conn = sqlite3.connect('overtime_database.db')  
-                df.to_sql('uncovered_duties', conn, if_exists='append', index=False)  
-                conn.close()  
-                st.success("Uncovered duties data imported successfully!")  
-  
-def view_reports():  
-    st.title("Reports")  
-      
-    # Load data  
-    df_overtime = load_data('overtime')  
-    df_duties = load_data('uncovered_duties')  
-      
-    # Ensure hours columns are numeric and handle any non-numeric values  
-    df_overtime['hours'] = pd.to_numeric(df_overtime['hours'], errors='coerce').fillna(0)  
-    df_duties['hours_uncovered'] = pd.to_numeric(df_duties['hours_uncovered'], errors='coerce').fillna(0)  
-      
-    # Create two columns for the charts  
-    col1, col2 = st.columns(2)  
-      
-    with col1:  
-        # Overtime Hours by Department  
-        overtime_hours = df_overtime.groupby('department')['hours'].sum()  
-          
-        # Only plot if we have data  
-        if len(overtime_hours) > 0 and overtime_hours.sum() > 0:  
-            fig1, ax1 = plt.subplots(figsize=(10, 6))  
-            plt.style.use('default')  
-              
-            # Plot the pie chart  
-            patches, texts, autotexts = ax1.pie(  
-                overtime_hours,  
-                labels=overtime_hours.index,  
-                autopct='%1.1f%%',  
-                colors=['#2563EB', '#24EB84', '#B2EB24', '#EB3424', '#D324EB'][:len(overtime_hours)]  
-            )  
-              
-            # Set title and display  
-            ax1.set_title('Overtime Hours by Department', pad=15)  
-            st.pyplot(fig1)  
-            plt.close()  
-        else:  
-            st.warning("No overtime hours data available to plot")  
-      
-    with col2:  
-        # Uncovered Hours by Department  
-        duties_hours = df_duties.groupby('department')['hours_uncovered'].sum()  
-          
-        # Only plot if we have data  
-        if len(duties_hours) > 0 and duties_hours.sum() > 0:  
-            fig2, ax2 = plt.subplots(figsize=(10, 6))  
-              
-            # Plot the pie chart  
-            patches, texts, autotexts = ax2.pie(  
-                duties_hours,  
-                labels=duties_hours.index,  
-                autopct='%1.1f%%',  
-                colors=['#2563EB', '#24EB84', '#B2EB24', '#EB3424', '#D324EB'][:len(duties_hours)]  
-            )  
-              
-            # Set title and display  
-            ax2.set_title('Uncovered Hours by Department', pad=15)  
-            st.pyplot(fig2)  
-            plt.close()  
-        else:  
-            st.warning("No uncovered duties data available to plot")  
-      
-    # Summary statistics  
-    st.subheader("Summary Statistics")  
-      
-    # Create summary tables  
-    summary_overtime = df_overtime.groupby('department').agg({  
-        'hours': ['sum', 'mean', 'count']  
-    }).round(2)  
-      
-    summary_duties = df_duties.groupby('department').agg({  
-        'hours_uncovered': ['sum', 'mean', 'count']  
-    }).round(2)  
-      
-    # Display summary tables  
-    col3, col4 = st.columns(2)  
-      
-    with col3:  
-        st.write("Overtime Summary by Department")  
-        if not summary_overtime.empty:  
-            st.dataframe(summary_overtime)  
-        else:  
-            st.warning("No overtime data available")  
-      
-    with col4:  
-        st.write("Uncovered Duties Summary by Department")  
-        if not summary_duties.empty:  
-            st.dataframe(summary_duties)  
-        else:  
-            st.warning("No uncovered duties data available")  
-      
-    # Monthly trend analysis  
-    st.subheader("Monthly Trends")  
-      
-    if not df_overtime.empty or not df_duties.empty:  
-        # Create monthly trends  
-        df_overtime['month'] = pd.to_datetime(df_overtime['date']).dt.to_period('M')  
-        df_duties['month'] = pd.to_datetime(df_duties['date']).dt.to_period('M')  
-          
-        monthly_overtime = df_overtime.groupby('month')['hours'].sum()  
-        monthly_duties = df_duties.groupby('month')['hours_uncovered'].sum()  
-          
-        # Plot trends  
-        fig3, ax3 = plt.subplots(figsize=(12, 6))  
-          
-        if not monthly_overtime.empty:  
-            monthly_overtime.plot(kind='line', marker='o', ax=ax3, label='Overtime Hours', color='#2563EB')  
-        if not monthly_duties.empty:  
-            monthly_duties.plot(kind='line', marker='s', ax=ax3, label='Uncovered Hours', color='#24EB84')  
-          
-        plt.title('Monthly Hours Trend', pad=15)  
-        plt.xlabel('Month', labelpad=10)  
-        plt.ylabel('Hours', labelpad=10)  
-        plt.legend()  
-        plt.grid(True, alpha=0.3)  
-        plt.xticks(rotation=45)  
-        plt.tight_layout()  
-        st.pyplot(fig3)  
-        plt.close()  
+def fetch_entries(department=None):  
+    conn = sqlite3.connect(DB_NAME)  
+    c = conn.cursor()  
+    if department:  
+        c.execute(f"SELECT * FROM {TABLE_NAME} WHERE department = ?", (department,))  
     else:  
-        st.warning("No data available for trend analysis")  
+        c.execute(f"SELECT * FROM {TABLE_NAME}")  
+    rows = c.fetchall()  
+    conn.close()  
+    columns = [  
+        'Entry ID', 'Date', 'Week Start', 'Week End', 'Employee ID', 'Name', 'Department',  
+        'Roster Group', 'Overtime Type', 'Hours', 'Depot', 'Notes', 'Reviewed By', 'Audit Status', 'Discrepancy/Comments'  
+    ]  
+    return pd.DataFrame(rows, columns=columns)  
   
- 
+def update_audit_status(entry_id, new_status):  
+    conn = sqlite3.connect(DB_NAME)  
+    c = conn.cursor()  
+    c.execute(f"UPDATE {TABLE_NAME} SET audit_status = ? WHERE entry_id = ?", (new_status, entry_id))  
+    conn.commit()  
+    conn.close()  
   
-# -------------------------------  
-# Main App  
-# -------------------------------  
-st.title("Employee Overtime Management System")  
+# --- UI FUNCTIONS ---  
+def entry_form(department=None):  
+    with st.form("entry_form_" + (department or "all"), clear_on_submit=True):  
+        date = st.date_input("Date", value=datetime.today())  
+        week_start = st.date_input("Week Start", value=datetime.today())  
+        week_end = st.date_input("Week End", value=datetime.today())  
+        employee_id = st.text_input("Employee ID")  
+        name = st.text_input("Name")  
+        dept = department or st.selectbox("Department", ["Planning", "Ops", "OCC", "Training"])  
+        roster_group = st.text_input("Roster Group")  
+        overtime_type = st.text_input("Overtime Type")  
+        hours = st.number_input("Hours", min_value=0.0, step=0.5)  
+        depot = st.text_input("Depot")  
+        notes = st.text_area("Notes")  
+        reviewed_by = st.text_input("Reviewed By")  
+        audit_status = st.selectbox("Audit Status", ["", "Pending", "Approved", "Rejected"])  
+        discrepancy_comments = st.text_area("Discrepancy/Comments")  
+        submitted = st.form_submit_button("Add Entry")  
+        if submitted:  
+            entry = {  
+                "date": str(date),  
+                "week_start": str(week_start),  
+                "week_end": str(week_end),  
+                "employee_id": employee_id,  
+                "name": name,  
+                "department": dept,  
+                "roster_group": roster_group,  
+                "overtime_type": overtime_type,  
+                "hours": hours,  
+                "depot": depot,  
+                "notes": notes,  
+                "reviewed_by": reviewed_by,  
+                "audit_status": audit_status,  
+                "discrepancy_comments": discrepancy_comments  
+            }  
+            insert_entry(entry)  
+            st.success("Entry added!")  
   
-# Sidebar navigation  
-page = st.sidebar.radio(  
-    "Navigation",  
-    ["Overtime Entry", "Uncovered Duties Entry", "Upload Data", "Reports"]  
-)  
+def department_tab(dept):  
+    st.subheader(dept + " Overtime Entries")  
+    df = fetch_entries(dept)  
+    st.dataframe(df.head(20))  
+    st.markdown("---")  
+    st.write("Add new entry for " + dept)  
+    entry_form(department=dept)  
   
-if page == "Overtime Entry":  
-    overtime_entry()  
-elif page == "Uncovered Duties Entry":  
-    uncovered_duties_entry()  
-elif page == "Upload Data":  
-    upload_data()  
-else:  
-    view_reports()  
+def summary_tab():  
+    st.subheader("Summary Dashboard")  
+    df = fetch_entries()  
+    st.dataframe(df.head(20))  
+    if not df.empty:  
+        st.bar_chart(df.groupby("Department")["Hours"].sum())  
+        st.line_chart(df.groupby("Date")["Hours"].sum())  
+    # Optionally, allow audit status update  
+    st.markdown("#### Update Audit Status")  
+    entry_id = st.number_input("Entry ID to update", min_value=1, step=1)  
+    new_status = st.selectbox("New Audit Status", ["Pending", "Approved", "Rejected"])  
+    if st.button("Update Status"):  
+        update_audit_status(entry_id, new_status)  
+        st.success("Audit status updated.")  
   
-# Footer  
-st.sidebar.markdown("---")  
-st.sidebar.markdown("© 2025 Employee Management System")  
-
+# --- MAIN APP ---  
+init_db()  
+st.title("Employee Overtime & Uncovered Duties Tool")  
+tabs = st.tabs(["Summary", "Planning", "Ops", "OCC", "Training"])  
+  
+with tabs[0]:  
+    summary_tab()  
+with tabs[1]:  
+    department_tab("Planning")  
+with tabs[2]:  
+    department_tab("Ops")  
+with tabs[3]:  
+    department_tab("OCC")  
+with tabs[4]:  
+    department_tab("Training")  
