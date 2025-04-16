@@ -74,7 +74,34 @@ def delete_entry(entry_id):
     conn.commit()  
     conn.close()  
   
-# --- FORM ---  
+# --- FILTER FUNCTION ---  
+def filter_df(df):  
+    df['date'] = pd.to_datetime(df['date'], errors='coerce')  
+    min_date = df['date'].min()  
+    max_date = df['date'].max()  
+    date_from, date_to = st.date_input(  
+        "Filter by Date Range",  
+        value=(  
+            min_date.date() if pd.notnull(min_date) else datetime.today().date(),  
+            max_date.date() if pd.notnull(max_date) else datetime.today().date()  
+        )  
+    )  
+    departments = ["All"] + sorted(df['department'].dropna().unique().tolist())  
+    department = st.selectbox("Filter by Department", departments)  
+    depots = ["All"] + sorted(df['depot'].dropna().unique().tolist())  
+    depot = st.selectbox("Filter by Depot", depots)  
+  
+    mask = (  
+        (df['date'] >= pd.to_datetime(date_from)) &  
+        (df['date'] <= pd.to_datetime(date_to))  
+    )  
+    if department != "All":  
+        mask = mask & (df['department'] == department)  
+    if depot != "All":  
+        mask = mask & (df['depot'] == depot)  
+    return df[mask]  
+  
+# --- ENTRY FORM ---  
 def entry_form(department):  
     st.subheader("Add Overtime Entry for " + department)  
     with st.form("form_page1_" + department, clear_on_submit=False):  
@@ -96,12 +123,12 @@ def entry_form(department):
     if st.session_state.get("show_page2_" + department, False):  
         with st.form("form_page2_" + department, clear_on_submit=False):  
             roster_group = st.text_input("Roster Group")  
-            overtime_type = st.selectbox("Overtime Type", ["Planned", "Unplanned"])   
+            overtime_type = st.selectbox("Overtime Type", ["Planned", "Unplanned"])  
             hours = st.number_input("Hours", min_value=0.0, step=0.25)  
             depot = st.selectbox("Depot", ["East", "West"])  
             notes = st.text_area("Notes")  
             reviewed_by = st.text_input("Reviewed By")  
-            audit_status = st.selectbox("Audit Status", ["Pending", "Approved", "Rejected"])   
+            audit_status = st.selectbox("Audit Status", ["Pending", "Approved", "Rejected"])  
             discrepancy_comments = st.text_area("Discrepancy Comments")  
             submit = st.form_submit_button("Submit")  
         if submit:  
@@ -121,7 +148,7 @@ def entry_form(department):
             st.success("Entry added!")  
             st.session_state["show_page2_" + department] = False  
   
-# --- DEPARTMENT TAB WITH DELETE ---  
+# --- DEPARTMENT TAB ---  
 def department_tab(dept):  
     st.subheader(dept + " Overtime Entries")  
     df = fetch_entries(dept)  
@@ -131,31 +158,12 @@ def department_tab(dept):
     if not df.empty:  
         st.markdown("#### Delete a Record")  
         entry_ids = df['entry_id'].tolist()  
-        selected_id = st.selectbox("Select Entry ID to Delete", entry_ids, key="delete_select_"+dept)  
-        if st.button("Delete Selected Entry", key="delete_btn_"+dept):  
+        selected_id = st.selectbox("Select Entry ID to Delete", entry_ids, key="delete_select_" + dept)  
+        if st.button("Delete Selected Entry", key="delete_btn_" + dept):  
             delete_entry(selected_id)  
             st.success("Entry deleted!")  
             st.experimental_rerun()  
     entry_form(dept)  
-  
-# --- FILTERS ---  
-def filter_df(df):  
-    st.markdown("### Filter Data")  
-    col1, col2, col3 = st.columns(3)  
-    with col1:  
-        min_date = pd.to_datetime(df['date'], errors='coerce').min()  
-        max_date = pd.to_datetime(df['date'], errors='coerce').max()  
-        date_from = st.date_input("Date From", min_value=min_date, max_value=max_date, value=min_date)  
-    with col2:  
-        date_to = st.date_input("Date To", min_value=min_date, max_value=max_date, value=max_date)  
-    with col3:  
-        departments = ["All"] + sorted(df['department'].dropna().unique().tolist())  
-        department = st.selectbox("Department", departments)  
-    mask = (pd.to_datetime(df['date'], errors='coerce') >= pd.to_datetime(date_from)) & \  
-           (pd.to_datetime(df['date'], errors='coerce') <= pd.to_datetime(date_to))  
-    if department != "All":  
-        mask = mask & (df['department'] == department)  
-    return df[mask]  
   
 # --- SUMMARY TAB ---  
 def summary_tab():  
