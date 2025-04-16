@@ -8,7 +8,7 @@ import base64
   
 # Page configuration  
 st.set_page_config(  
-    page_title="Employee Overtime & Uncovered Duties Tool",  
+    page_title="Employee Overtime Tool",  
     page_icon="👥",  
     layout="wide",  
     initial_sidebar_state="expanded"  
@@ -268,7 +268,7 @@ def upload_module():
             st.error(f"Error processing file: {e}")  
   
 def main():  
-    st.title("Employee Overtime & Uncovered Duties Management System")  
+    st.title("Employee Overtime Management System")  
       
     # Navigation  
     page = st.sidebar.radio(  
