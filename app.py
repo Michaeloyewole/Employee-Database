@@ -336,11 +336,7 @@ def view_reports():
     else:  
         st.warning("No data available for trend analysis")  
   
-   if st.button("Download Report"):  
-        csv = df_overtime.to_csv(index=False)  
-        b64 = base64.b64encode(csv.encode()).decode()  
-        href = f'data:file/csv;base64,{b64}'  
-        st.markdown(f'<a href="{href}" download="overtime_report.csv">Download CSV Report</a>', unsafe_allow_html=True)  
+ 
   
 # -------------------------------  
 # Main App  
