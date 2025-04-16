@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd  
 import sqlite3  
 from datetime import datetime  
+import io  
   
 # --- CONFIGURATION ---  
 st.set_page_config(page_title="Overtime Management App", page_icon="🕒", layout="wide")  
@@ -54,7 +55,7 @@ def fetch_entries(department=None):
     conn = sqlite3.connect(DB_NAME)  
     query = f"SELECT * FROM {TABLE_NAME}"  
     params = ()  
-    if department and department != "All":  
+    if department:  
         query += " WHERE department = ?"  
         params = (department,)  
     df = pd.read_sql_query(query, conn, params=params)  
@@ -74,39 +75,16 @@ def delete_entry(entry_id):
     conn.commit()  
     conn.close()  
   
-# --- FILTER FUNCTION WITH UNIQUE KEYS ---  
-def filter_df(df, key_prefix=""):  
-    df['date'] = pd.to_datetime(df['date'], errors='coerce')  
-    min_date = df['date'].min()  
-    max_date = df['date'].max()  
-    date_from, date_to = st.date_input(  
-        "Filter by Date Range",  
-        value=(min_date if pd.notnull(min_date) else datetime.today(), max_date if pd.notnull(max_date) else datetime.today()),  
-        key=key_prefix+"date_input"  
-    )  
-    departments = ["All"] + sorted(df['department'].dropna().unique().tolist())  
-    department = st.selectbox("Filter by Department", departments, key=key_prefix+"department_select")  
-    depots = ["All"] + sorted(df['depot'].dropna().unique().tolist())  
-    depot = st.selectbox("Filter by Depot", depots, key=key_prefix+"depot_select")  
-    mask = (  
-        (df['date'] >= pd.to_datetime(date_from)) &  
-        (df['date'] <= pd.to_datetime(date_to))  
-    )  
-    if department != "All":  
-        mask = mask & (df['department'] == department)  
-    if depot != "All":  
-        mask = mask & (df['depot'] == depot)  
-    return df[mask]  
-  
-# --- ENTRY FORM ---  
+# --- TWO-PAGE FORM ---  
 def entry_form(department):  
     st.subheader("Add Overtime Entry for " + department)  
+    # Use department in form keys to ensure uniqueness  
     with st.form("form_page1_" + department, clear_on_submit=False):  
-        date = st.date_input("Date", key="date_"+department)  
-        week_start = st.date_input("Week Start", key="week_start_"+department)  
-        week_end = st.date_input("Week End", key="week_end_"+department)  
-        employee_id = st.text_input("Employee ID", key="empid_"+department)  
-        name = st.text_input("Name", key="name_"+department)  
+        date = st.date_input("Date")  
+        week_start = st.date_input("Week Start")  
+        week_end = st.date_input("Week End")  
+        employee_id = st.text_input("Employee ID")  
+        name = st.text_input("Name")  
         next_page = st.form_submit_button("Next")  
     if next_page:  
         st.session_state["form1_data_" + department] = {  
@@ -119,14 +97,14 @@ def entry_form(department):
         st.session_state["show_page2_" + department] = True  
     if st.session_state.get("show_page2_" + department, False):  
         with st.form("form_page2_" + department, clear_on_submit=False):  
-            roster_group = st.text_input("Roster Group", key="roster_"+department)  
-            overtime_type = st.selectbox("Overtime Type", ["Planned", "Unplanned"], key="ot_type_"+department)  
-            hours = st.number_input("Hours", min_value=0.0, step=0.25, key="hours_"+department)  
-            depot = st.selectbox("Depot", ["East", "West"], key="depot_"+department)  
-            notes = st.text_area("Notes", key="notes_"+department)  
-            reviewed_by = st.text_input("Reviewed By", key="reviewed_"+department)  
-            audit_status = st.selectbox("Audit Status", ["Pending", "Approved", "Rejected"], key="audit_"+department)  
-            discrepancy_comments = st.text_area("Discrepancy Comments", key="discrepancy_"+department)  
+            roster_group = st.text_input("Roster Group")  
+            overtime_type = st.selectbox("Overtime Type", ["Planned", "Unplanned"])   
+            hours = st.number_input("Hours", min_value=0.0, step=0.25)  
+            depot = st.text_input("Depot")  
+            notes = st.text_area("Notes")  
+            reviewed_by = st.text_input("Reviewed By")  
+            audit_status = st.selectbox("Audit Status", ["Pending", "Approved", "Rejected"])   
+            discrepancy_comments = st.text_area("Discrepancy Comments")  
             submit = st.form_submit_button("Submit")  
         if submit:  
             entry = st.session_state["form1_data_" + department]  
@@ -149,17 +127,17 @@ def entry_form(department):
 def department_tab(dept):  
     st.subheader(dept + " Overtime Entries")  
     df = fetch_entries(dept)  
+    st.dataframe(df.tail(20))  
+    st.markdown("---")  
+    # Record deletion UI  
     if not df.empty:  
-        st.dataframe(df.tail(20))  
         st.markdown("#### Delete a Record")  
         entry_ids = df['entry_id'].tolist()  
-        selected_id = st.selectbox("Select Entry ID to Delete", entry_ids, key="delete_select_"+dept)  
-        if st.button("Delete Selected Entry", key="delete_btn_"+dept):  
+        selected_id = st.selectbox("Select Entry ID to Delete", entry_ids, key="delete_select_" + dept)  
+        if st.button("Delete Selected Entry", key="delete_btn_" + dept):  
             delete_entry(selected_id)  
             st.success("Entry deleted!")  
             st.experimental_rerun()  
-    else:  
-        st.info("No entries yet.")  
     entry_form(dept)  
   
 # --- SUMMARY TAB ---  
@@ -167,8 +145,7 @@ def summary_tab():
     st.header("Summary")  
     df = fetch_entries()  
     if not df.empty:  
-        df_filtered = filter_df(df, key_prefix="summary_")  
-        st.dataframe(df_filtered.tail(20))  
+        st.dataframe(df.tail(20))  
     else:  
         st.info("No entries yet.")  
   
@@ -179,28 +156,26 @@ def report_tab():
     if df.empty:  
         st.info("No data available for reporting.")  
         return  
-    df_filtered = filter_df(df, key_prefix="report_")  
-    if df_filtered.empty:  
-        st.info("No data for selected filters.")  
-        return  
     st.write("**Total Overtime Hours by Department**")  
-    st.bar_chart(df_filtered.groupby("department")["hours"].sum())  
+    st.bar_chart(df.groupby("department")["hours"].sum())  
     st.write("**Overtime Hours Trend**")  
-    df_filtered['date'] = pd.to_datetime(df_filtered['date'], errors='coerce')  
-    trend = df_filtered.groupby("date")["hours"].sum().sort_index()  
+    df['date'] = pd.to_datetime(df['date'], errors='coerce')  
+    trend = df.groupby("date")["hours"].sum().sort_index()  
     st.line_chart(trend)  
     st.write("**Audit Status Distribution**")  
-    st.dataframe(df_filtered["audit_status"].value_counts())  
+    st.dataframe(df["audit_status"].value_counts())  
     st.write("**Department & Audit Status Pivot Table**")  
-    pivot = pd.pivot_table(df_filtered, values="hours", index="department", columns="audit_status", aggfunc="sum", fill_value=0)  
+    pivot = pd.pivot_table(df, values="hours", index="department", columns="audit_status", aggfunc="sum", fill_value=0)  
     st.dataframe(pivot)  
   
 # --- IMPORT/EXPORT MODULE ---  
 def import_export_tab():  
     st.subheader("Import/Export Data")  
+    # Export  
     df = fetch_entries()  
     csv = df.to_csv(index=False).encode("utf-8")  
     st.download_button("Download Data as CSV", data=csv, file_name="overtime_data.csv", mime="text/csv")  
+    # Import  
     uploaded_file = st.file_uploader("Upload CSV to Import Data", type=["csv"])  
     if uploaded_file is not None:  
         import_data(uploaded_file)  
