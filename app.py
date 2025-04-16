@@ -216,88 +216,126 @@ def upload_data():
                 st.success("Uncovered duties data imported successfully!")  
   
 def view_reports():  
-    st.header("Reports")  
+    st.title("Reports")  
       
-    # Date filter  
+    # Load data  
+    df_overtime = load_data('overtime')  
+    df_duties = load_data('uncovered_duties')  
+      
+    # Ensure hours columns are numeric and handle any non-numeric values  
+    df_overtime['hours'] = pd.to_numeric(df_overtime['hours'], errors='coerce').fillna(0)  
+    df_duties['hours_uncovered'] = pd.to_numeric(df_duties['hours_uncovered'], errors='coerce').fillna(0)  
+      
+    # Create two columns for the charts  
     col1, col2 = st.columns(2)  
+      
     with col1:  
-        start_date = st.date_input("From Date", datetime.now() - timedelta(days=30))  
+        # Overtime Hours by Department  
+        overtime_hours = df_overtime.groupby('department')['hours'].sum()  
+          
+        # Only plot if we have data  
+        if len(overtime_hours) > 0 and overtime_hours.sum() > 0:  
+            fig1, ax1 = plt.subplots(figsize=(10, 6))  
+            plt.style.use('default')  
+              
+            # Plot the pie chart  
+            patches, texts, autotexts = ax1.pie(  
+                overtime_hours,  
+                labels=overtime_hours.index,  
+                autopct='%1.1f%%',  
+                colors=['#2563EB', '#24EB84', '#B2EB24', '#EB3424', '#D324EB'][:len(overtime_hours)]  
+            )  
+              
+            # Set title and display  
+            ax1.set_title('Overtime Hours by Department', pad=15)  
+            st.pyplot(fig1)  
+            plt.close()  
+        else:  
+            st.warning("No overtime hours data available to plot")  
+      
     with col2:  
-        end_date = st.date_input("To Date", datetime.now())  
+        # Uncovered Hours by Department  
+        duties_hours = df_duties.groupby('department')['hours_uncovered'].sum()  
+          
+        # Only plot if we have data  
+        if len(duties_hours) > 0 and duties_hours.sum() > 0:  
+            fig2, ax2 = plt.subplots(figsize=(10, 6))  
+              
+            # Plot the pie chart  
+            patches, texts, autotexts = ax2.pie(  
+                duties_hours,  
+                labels=duties_hours.index,  
+                autopct='%1.1f%%',  
+                colors=['#2563EB', '#24EB84', '#B2EB24', '#EB3424', '#D324EB'][:len(duties_hours)]  
+            )  
+              
+            # Set title and display  
+            ax2.set_title('Uncovered Hours by Department', pad=15)  
+            st.pyplot(fig2)  
+            plt.close()  
+        else:  
+            st.warning("No uncovered duties data available to plot")  
       
-    # Department filter  
-    department = st.selectbox(  
-        "Filter by Department",  
-        ["All Departments", "Operations", "Engineering", "HR", "Finance"]  
-    )  
+    # Summary statistics  
+    st.subheader("Summary Statistics")  
       
-    # Load and filter data  
-    df_overtime = load_data("overtime")  
-    df_duties = load_data("uncovered_duties")  
+    # Create summary tables  
+    summary_overtime = df_overtime.groupby('department').agg({  
+        'hours': ['sum', 'mean', 'count']  
+    }).round(2)  
       
-    # Apply filters  
-    mask_date_ot = (df_overtime['date'].dt.date >= start_date) & (df_overtime['date'].dt.date <= end_date)  
-    mask_date_duties = (pd.to_datetime(df_duties['date']).dt.date >= start_date) & (pd.to_datetime(df_duties['date']).dt.date <= end_date)  
+    summary_duties = df_duties.groupby('department').agg({  
+        'hours_uncovered': ['sum', 'mean', 'count']  
+    }).round(2)  
       
-    df_overtime = df_overtime[mask_date_ot]  
-    df_duties = df_duties[mask_date_duties]  
+    # Display summary tables  
+    col3, col4 = st.columns(2)  
       
-    if department != "All Departments":  
-        df_overtime = df_overtime[df_overtime['department'] == department]  
-        df_duties = df_duties[df_duties['department'] == department]  
-      
-    # Display metrics  
-    col1, col2, col3, col4 = st.columns(4)  
-    with col1:  
-        st.metric("Total Overtime Hours", f"{df_overtime['hours'].sum():.1f}")  
-    with col2:  
-        st.metric("Total Entries", len(df_overtime))  
     with col3:  
-        st.metric("Uncovered Hours", f"{df_duties['hours_uncovered'].sum():.1f}")  
+        st.write("Overtime Summary by Department")  
+        if not summary_overtime.empty:  
+            st.dataframe(summary_overtime)  
+        else:  
+            st.warning("No overtime data available")  
+      
     with col4:  
-        st.metric("Open Uncovered Duties", len(df_duties[df_duties['status'] == 'Open']))  
+        st.write("Uncovered Duties Summary by Department")  
+        if not summary_duties.empty:  
+            st.dataframe(summary_duties)  
+        else:  
+            st.warning("No uncovered duties data available")  
       
-    # Charts  
-    st.subheader("Overtime Distribution")  
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))  
+    # Monthly trend analysis  
+    st.subheader("Monthly Trends")  
       
-    # Overtime by department  
-    dept_hours = df_overtime.groupby('department')['hours'].sum()  
-    dept_hours.plot(kind='pie', ax=ax1, title='Overtime Hours by Department')  
-      
-    # Uncovered duties by department  
-    duties_hours = df_duties.groupby('department')['hours_uncovered'].sum()  
-    duties_hours.plot(kind='pie', ax=ax2, title='Uncovered Hours by Department')  
-      
-    st.pyplot(fig)  
-      
-    # Data tables with editing capability  
-    st.subheader("Overtime Records")  
-    edited_overtime = st.data_editor(  
-        df_overtime,  
-        num_rows="dynamic",  
-        use_container_width=True,  
-        column_config={  
-            "overtime_id": None,  # Hide ID column  
-            "date": st.column_config.DateColumn("Date"),  
-            "hours": st.column_config.NumberColumn("Hours", min_value=0, max_value=24, step=0.5),  
-            "status": st.column_config.SelectboxColumn("Status", options=["Pending", "Approved", "Rejected"])  
-        }  
-    )  
-      
-    st.subheader("Uncovered Duties Records")  
-    edited_duties = st.data_editor(  
-        df_duties,  
-        num_rows="dynamic",  
-        use_container_width=True,  
-        column_config={  
-            "duty_id": None,  # Hide ID column  
-            "date": st.column_config.DateColumn("Date"),  
-            "hours_uncovered": st.column_config.NumberColumn("Hours", min_value=0, max_value=24, step=0.5),  
-            "status": st.column_config.SelectboxColumn("Status", options=["Open", "Covered", "Cancelled"])  
-        }  
-    )  
-      
+    if not df_overtime.empty or not df_duties.empty:  
+        # Create monthly trends  
+        df_overtime['month'] = pd.to_datetime(df_overtime['date']).dt.to_period('M')  
+        df_duties['month'] = pd.to_datetime(df_duties['date']).dt.to_period('M')  
+          
+        monthly_overtime = df_overtime.groupby('month')['hours'].sum()  
+        monthly_duties = df_duties.groupby('month')['hours_uncovered'].sum()  
+          
+        # Plot trends  
+        fig3, ax3 = plt.subplots(figsize=(12, 6))  
+          
+        if not monthly_overtime.empty:  
+            monthly_overtime.plot(kind='line', marker='o', ax=ax3, label='Overtime Hours', color='#2563EB')  
+        if not monthly_duties.empty:  
+            monthly_duties.plot(kind='line', marker='s', ax=ax3, label='Uncovered Hours', color='#24EB84')  
+          
+        plt.title('Monthly Hours Trend', pad=15)  
+        plt.xlabel('Month', labelpad=10)  
+        plt.ylabel('Hours', labelpad=10)  
+        plt.legend()  
+        plt.grid(True, alpha=0.3)  
+        plt.xticks(rotation=45)  
+        plt.tight_layout()  
+        st.pyplot(fig3)  
+        plt.close()  
+    else:  
+        st.warning("No data available for trend analysis")  
+  
     # Download buttons  
     col1, col2 = st.columns(2)  
     with col1:  
